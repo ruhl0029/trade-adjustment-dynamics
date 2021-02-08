@@ -1,0 +1,49 @@
+\documentclass[12pt,leqno]{article}
+\usepackage{booktabs}
+\usepackage[left=1in,right=1in,top=1in,bottom=1in]{geometry}
+\begin{document}
+\begin{table}[tbp]
+\small \centering\begin{tabular}{cccccccc}
+\toprule
+\multicolumn{8}{l}{\textit{Common Parameters}}\\
+& $\beta$ & $\sigma$ & $\delta$ & $\tau$ & $\gamma_0,\gamma_1$ & $\rho,\sigma_\epsilon$ & $\mu_E$ \\
+\cmidrule{2-8}
+& {0.96} & {2.0} & {0.10} & {1.10} & 21.0, 0.02 & 0.65, 1.32 & --1.34 \\
+\multicolumn{8}{l}{\textit{Model-specific Parameters}} \\
+& {Bench-} & {Sunk} & {Sunk-cost} & {No} & {Reentry} & {Search} & {Starters}\\[-1mm]
+& {mark} & {Cost} & {High} & {Cost} &  &  &  \\
+\midrule
+$\theta$ & 5.0 & 5.0 & 5.0 & 5.0 & 5.0 & 5.0 & 5.0 \\ 
+$\alpha$ & 0.132 & 0.132 & 0.132 & 0.132 & 0.132 & 0.132 & 0.132 \\ 
+$\alpha_x$ & 0.810 & 0.810 & 0.810 & 0.810 & 0.810 & 0.810 & 0.810 \\ 
+$\theta\kappa_E$ & 32.7 & 33.2 & 32.7 & 35.4 & 32.6 & 32.6 & 32.5 \\ 
+$100\times\kappa_H/\kappa_E$ & 3.76 & 5.80 & 18.34 & 0.00 & 5.90 & 1.12 & 2.76 \\ 
+$\kappa_H/\kappa_L$ & 1.40 & 3.80 & 11.08 & -- & 2.23 & 0.38 & 0.89 \\ 
+$\xi_H$ & 1.72 & 1.42 & 1.34 & 1.11 & 1.70 & 1.67 & 2.20 \\ 
+$\xi_L$ & 1.07 & 1.42 & 1.34 & 1.11 & 1.06 & 1.04 & 1.00 \\ 
+$\rho_{\xi}$ & 0.92 & 0.50 & 0.50 & 0.50 & 0.92 & 0.92 & 0.92 \\ 
+$\eta$ & 1.00 & 1.00 & 1.00 & 1.00 & 1.00 & 0.33 & 1.00 \\ 
+$\kappa_R/\kappa_L$ & 1.40 & 3.80 & 11.08 & -- & 0.67 & 1.14 & 0.89 \\ 
+&&&&&&&\\
+\multicolumn{8}{l}{\textit{Overall Fit (RMSE): Size Distributions}}\\
+\multicolumn{1}{l}{Estab. + Empl.} & 0.70 & 0.70 & 0.78 & 1.29 & 0.70 & 0.67 & 0.70 \\ 
+\multicolumn{1}{l}{Export} & 14.6 & 15.7 & 3.8 & 49.6 & 11.9 & 4.5 & 15.2 \\ 
+&&&&&&&\\
+\multicolumn{8}{l}{\textit{Fixed Trade Costs Relative to}}\\
+\multicolumn{1}{l}{Plant Creation Cost} & 10.8 & 8.7 & 10.8 & 0.0 & 11.3 & 11.2 & 11.5 \\ 
+\multicolumn{1}{l}{Export Profits} & 58.1 & 47.6 & 58.1 & 0.0 & 60.6 & 60.4 & 63.0 \\ 
+&&&&&&&\\
+\multicolumn{8}{l}{\textit{Selected moments (Data)}}\\
+\multicolumn{1}{l}{Exit Rate (17.0)} & 17.0 & 17.0 & 4.0 & 0.0 & 17.0 & 17.0 & 17.0 \\ 
+\multicolumn{1}{l}{Starter Ratio (25.1)} & 65.5 & 137.5 & 309.5 & -- & 63.2 & 52.1 & 25.1 \\ 
+\multicolumn{1}{l}{Starter Export Share (4.9)} & 12.8 & 26.4 & 23.0 & -- & 12.4 & 10.2 & 4.9 \\ 
+\multicolumn{1}{l}{5-yr Incumbent Share} & 48.7 & 29.8 & 43.5 & -- & 52.7 & 54.0 & 58.7 \\ 
+\multicolumn{1}{l}{Dom. Expenditure Share} & 91.2 & 91.2 & 91.2 & 91.2 & 91.2 & 91.2 & 91.3 \\ 
+\multicolumn{1}{l}{Export Participation} & 22.3 & 22.3 & 22.3 & 100.0 & 22.3 & 22.3 & 22.6 \\ 
+\multicolumn{1}{l}{Export Intensity} & 13.3 & 13.1 & 16.1 & 8.1 & 13.8 & 15.4 & 13.0 \\ 
+\multicolumn{1}{l}{Exporter Premium} & 273.5 & 277.8 & 226.2 & 100.0 & 267.1 & 239.9 & 275.1 \\ 
+\multicolumn{1}{l}{Average $\xi$} & 141.8 & 142.5 & 134.2 & 111.3 & 140.3 & 135.9 & 142.9 \\ 
+\bottomrule
+\end{tabular}
+\end{table}
+\end{document}

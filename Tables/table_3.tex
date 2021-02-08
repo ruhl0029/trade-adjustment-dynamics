@@ -1,0 +1,42 @@
+\documentclass[12pt,leqno]{article}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage[left=0.5in,right=0.5in,top=1in,bottom=1in]{geometry}
+\sisetup{input-decimal-markers = .,input-ignore = {,}, parse-numbers=false, group-separator={,}, group-four-digits = false}
+\begin{document}
+\begin{table}[tbp]
+\small \centering\begin{tabular}{lSSSSSSSS}
+\toprule
+& {Bench    } & {Sunk-cost} & {Sunk-cost} & {Sunk-cost} & {Reentry  } & {Search   } & {Starters } & {No-Cost  } \\
+& {       } & {       } & {High   } & {Iceberg} & {       } & {       } & {       } & {       } \\
+\midrule
+\multicolumn{9}{l}{\textit{Trade Elasticity}} \\ [0.5ex]
+Discounted & 10.16 & 6.90 & 8.67 & 11.21 & 10.75 & 10.96 & 11.87 & 10.19 \\ 
+Steady state & 11.55 & 7.19 & 9.44 & 11.55 & 12.23 & 12.77 & 13.72 & 11.55 \\ 
+[1.5ex]\multicolumn{9}{l}{\textit{Change in}} \\ [0.5ex]
+Welfare & 6.30 & 4.75 & 5.67 & 13.44 & 6.83 & 6.87 & 7.28 & 4.59 \\ 
+Consumption & 0.42 & 1.98 & 1.65 & 9.42 & 0.70 & 0.21 & 0.11 & 6.22 \\ 
+Estab. & -13.11 & -4.82 & -8.60 & -7.57 & -14.41 & -15.82 & -17.68 & 0.00 \\ 
+Exporters & 104.65 & 72.25 & 89.16 & 101.96 & 111.96 & 112.26 & 116.06 & 0.00 \\ 
+Ex. Intensity & 61.77 & 39.97 & 38.30 & 64.11 & 61.50 & 59.16 & 74.57 & 102.44 \\ 
+Ex. Premium & -63.98 & -43.28 & -40.91 & -63.63 & -66.04 & -60.06 & -72.19 & -0.00 \\ 
+Iceberg Cost & -26.20 & 0.00 & 0.00 & -28.78 & -27.39 & -28.81 & -43.76 & 0.00 \\ 
+[1.5ex]\multicolumn{9}{l}{\textit{SS output decomposition (Discounted values in brackets)}} \\ [0.5ex]
+$\widehat{Y}$ & 0.52 & 2.08 & 1.74 & 9.52 & 0.79 & 0.30 & 0.20 & 6.31 \\ 
+ & [6.59] & [4.98] & [5.93] & [13.78] & [7.13] & [7.18] & [7.59] & [4.70] \\ [1ex] 
+$\widehat{L}_p$ & -2.11 & -1.01 & -1.34 & -1.51 & -2.14 & -2.40 & -2.61 & 0.00 \\ 
+ & [-1.08] & [-0.70] & [-0.83] & [-0.99] & [-1.06] & [-1.03] & [-1.23] & [0.49] \\ [1ex] 
+$\alpha \widehat{\frac{K}{L}}$ & 0.65 & 0.71 & 0.71 & 1.76 & 0.69 & 0.66 & 0.67 & 1.14 \\ 
+ & [1.31] & [1.05] & [1.20] & [2.17] & [1.37] & [1.37] & [1.44] & [0.61] \\ [1ex] 
+$\widehat{S-\frac{\alpha_x(\theta-1)}{\theta}}$ & -2.28 & -2.28 & -2.28 & -2.28 & -2.28 & -2.28 & -2.23 & -3.14 \\ 
+ & [-2.28] & [-2.28] & [-2.28] & [-2.28] & [-2.28] & [-2.28] & [-2.23] & [-3.14] \\ [1ex] 
+$\widehat{N^\dagger}$ & -17.26 & -6.35 & -11.32 & -9.97 & -18.97 & -20.82 & -23.26 & 0.00 \\ 
+ & [-10.40] & [-3.88] & [-7.09] & [-6.33] & [-11.68] & [-12.49] & [-14.41] & [-0.16] \\ [1ex] 
+$\widehat{\psi_d^\dagger}$ & 0.00 & -0.00 & 0.00 & 0.00 & 0.00 & -0.00 & -0.00 & 0.00 \\ 
+ & [0.92] & [0.34] & [0.63] & [0.56] & [1.03] & [1.11] & [1.28] & [0.01] \\ [1ex] 
+$\widehat{\lambda^\dagger}$ & 21.51 & 11.00 & 15.97 & 21.51 & 23.49 & 25.14 & 27.64 & 7.45 \\ 
+ & [18.12] & [10.45] & [14.29] & [20.65] & [19.74] & [20.51] & [22.76] & [6.31] \\ [1ex] 
+\bottomrule
+\end{tabular}
+\end{table}
+\end{document}
