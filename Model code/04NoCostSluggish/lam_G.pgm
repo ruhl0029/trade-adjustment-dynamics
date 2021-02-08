@@ -1,0 +1,219 @@
+/***************************************************
+     
+     Compute Sluggish Trade Growth in Nocost model
+     
+     function:   
+     
+     Elasticity unadjusted fi
+     
+     
+ ***************************************************/
+new;cls;
+output file = lam_G.out reset;
+
+library  optmum, pgraph;
+#include nlsys.set;
+#include olss.src;
+rndseed 710130;
+
+di   = 1e-8;             @ convergence tolerence @
+/*===========================================================*
+ * Variables for the Solutions of Nonlinear System Equations *
+ *===========================================================*/
+    convtol=di;          @ convergence tolerance.                  @
+    prntit=0;            @ if 1 will print on every iteration @
+    prntout=0;           @ if 1, will print final output;
+                         NOTE: the solution vector is always
+                               assigned to x1, and will be in memory when
+                               the program is completed.               @
+    fname=&f;            @ change this if the name of the proc
+                           containing the functions is not = f     @
+    gradname=&grad1;     @ change this tO specify another proc to 
+                           compute the Jacobian matrix, if desired.@ 
+    jc0=0;               @ change this to specify a KxK matrix to be
+                           used as the initial value of the Jacobian,
+                           if desired.                             @ 
+    fname=&f;
+/*===========================================================*/
+format /rdn 20,8;
+
+@===============================@
+@===  Sunk Cost computation  ===@
+@===============================@
+load S_lam[] = Sunk_lam.txt;  @ Domestic/total spending (starting with initial lambda) @
+S_IMD = 1/S_lam-1;            @ Import/Domestic spending @
+
+Sta0 = 1.10;                  @ Sunk initial tariff @
+Sta1 = 1.00;                     @ Sunk new tariff @
+Sth  = 5;                     @ Sunk elasticity @
+
+S_GIMD= ln(S_IMD/S_IMD[1]);   @ Log growth rate of IM/D @
+S_ELS = -S_GIMD/ln(Sta1/Sta0);@ Elasticity @
+
+bet=0.96;
+betas = 0;    @ take initial = 0 @
+i=1; do until i>rows(S_ELS)-1; 
+   betas=betas|(bet^(i-1));
+i=i+1; endo;
+/*
+@-- Adding more ---@
+S_lam = S_lam|(ones(rows(betas)-rows(S_lam),1)*S_lam[rows(S_lam),.]);
+S_IMD = S_IMD|(ones(rows(betas)-rows(S_IMD),1)*S_lam[rows(S_IMD),.]);
+S_GIMD = S_GIMD|(ones(rows(betas)-rows(S_GIMD),1)*S_GIMD[rows(S_GIMD),.]);
+S_ELS = S_ELS|(ones(rows(betas)-rows(S_ELS),1)*S_ELS[rows(S_ELS),.]);
+*/
+@=============================@
+@===  No Cost computation  ===@
+@=============================@
+
+Nta0 = 1.10;                  @ Nocost initial tariff @
+Nta1 = 1.00;                  @ Nocost new tariff @
+Nxi0 = 1.11254415;            @ Nocost initial iceberg @
+Nxi1 = 1.11254415;            @ Nocost new iceberg @
+Nth  = 12.54751853;           @ Nocost elasticity @
+
+@=== for IMD ===@
+fi = 5;                     @ adjustment factor @
+rhog = 0.65;
+
+
+@=== for lambda ===@
+fi = 30;                     @ adjustment factor @
+rhog = 0.55;
+
+g0 = 1; 
+gs = g0;   @ Stacking home bias @
+Nta0xi0 = (Nta0*Nxi0)^(1-Nth);
+Nta1xi1 = (Nta1*Nxi1)^(1-Nth);
+
+convtol=di;    prntit=0;
+vf = 1;
+g1 = 100;
+N_IMD = g0*Nta0xi0;  @ Initial IMD @
+
+i=1; do until i>rows(S_IMD)-1;
+   @g1 = ( g0*Nta0xi0/Nta1xi1 )^(fi/(1+fi)); @
+      
+   gnew1= nlsys(&gnew,ln(g1),jc0,convtol,prntit,prntout);
+
+   N_IMD = N_IMD|( g1*Nta1xi1 );
+   gs = gs|g1;
+   g0 = g1;
+   Nta0xi0 = Nta1xi1;
+i=i+1; endo;
+N_GIMD= ln(N_IMD/N_IMD[1]);   @ Log growth rate of IM/D @
+N_ELS = -N_GIMD/ln(Nta1/Nta0);@ Elasticity @
+
+?"      Year      ELS(Sunk)      ELS(Krugman)";;
+?seqa(0,1,rows(N_ELS))~S_ELS~N_ELS;
+?;
+
+
+@=====   Does not work (1 variable 1 equation) =====@
+@=====   But, get fi close to the solution   =====@
+_opgtol = 1e-5;
+__output = 1;
+LL =100;  @ initializing eval @
+/*
+fi = 36.69953393;                     @ adjustment factor @
+rhog = 0.52853652;
+*/
+{xout,fout,gout,cout}=optmum(&search_fi,ln(fi|rhog));                    @ first step to get muE and nd0 given others @ 
+?;
+?;
+?"  elasticity unadjusted  fi  (for programs) =";;fi;
+?"  elasticity fi            (for manuscript) =";;fi/Nth;
+?"  rhog";;rhog;
+?;
+
+?"      Year      ELS(Sunk)      ELS(Krugman)";;
+?seqa(0,1,rows(N_ELS))~S_ELS~N_ELS;
+?;
+
+save gs;
+
+end;
+
+
+
+
+
+
+
+
+
+
+
+
+
+@--------------- BEGIN PROC search_fi(x) -------------------@
+proc(1)= search_fi(xx);
+   @local vf;@
+   fi = exp(xx[1]);
+   rhog = exp(xx[2]);
+   
+   Nta0xi0 = (Nta0*Nxi0)^(1-Nth);
+   Nta1xi1 = (Nta1*Nxi1)^(1-Nth);
+   
+   g0 = 1; 
+   gs = g0;   @ Stacking home bias @
+   vf = 1;
+   g1 = 100;
+   
+   N_IMD = g0*Nta0xi0;  @ Initial IMD @
+   i=1; do until i>rows(S_IMD)-1;
+      @g1 = ( g0*Nta0xi0/Nta1xi1 )^(fi/(1+fi)); @
+         
+      gnew1= nlsys(&gnew,ln(g1),jc0,convtol,prntit,prntout);
+
+      N_IMD = N_IMD|( g1*Nta1xi1 );
+      gs = gs|g1;
+      g0 = g1;
+      Nta0xi0 = Nta1xi1;
+   i=i+1; endo;
+   N_GIMD= ln(N_IMD/N_IMD[1]);   @ Log growth rate of IM/D @
+   N_ELS = -N_GIMD/ln(Nxi1*Nta1/Nxi0/Nta0);@ Elasticity @
+   
+   LL = (betas.*(S_ELS-N_ELS)).^2;
+   @LL = betas.*((S_ELS-N_ELS).^2);@
+
+retp(sumc(LL));
+endp;
+@--------------- END PROC search_fi(x) -------------------@
+
+
+
+@--------------- BEGIN PROC gnew(x) -------------------@
+proc gnew(x);
+   @local vf;@
+   g1 = exp(x);
+  
+   vf[1] = g1 - g0^(rhog)*( (1+g0*Nta0xi0)/(1+g1*Nta1xi1) )^(fi*(1-rhog));  @ fi = 16 @
+  
+   /*
+   vf[1] = g1 - g0^(rhog)*( (g0*Nta0xi0)/(g1*Nta1xi1) )^(fi*(1-rhog));  @ fi = 16 @
+   
+   vf[1] = g1 - exp( fi*( g0*Nta0xi0/(g1*Nta1xi1) -1) );  @ fi = 1.3 @
+   */
+   /*    
+   vf[1] = g1 - fi*ln( (g0*Nta0xi0)/(g1*Nta1xi1) )-1;  @ fi = 16 @
+   
+   vf[1] = g1 - ( 1 + (g0*(Nta0xi0)) - (g1*(Nta1xi1)) )^(fi);  @ fi = 16 @
+   
+   vf[1] = g1 - ( 1 + (g0*(Nta0xi0)^(-Nth/(1-Nth))) - (g1*(Nta1xi1)^(-Nth/(1-Nth))) )^(fi);  @ fi = 16 @
+   
+   vf[1] = g1 - ( (g0*(Nta0xi0)^(-Nth/(1-Nth)))/(g1*(Nta1xi1)^(-Nth/(1-Nth))) )^(fi);  @ fi = 16 @
+
+   vf[1] = g1 - ( (g0*Nta0xi0)/(g1*Nta1xi1) )^(fi);  @ fi = 16 @
+   
+   vf[1] = g1 - exp( fi*( g0*Nta0xi0/(g1*Nta1xi1) -1) );  @ fi = 1.3 @
+   
+   vf[1] = g1 - ( g1*Nta1xi1/(g0*Nta0xi0)*(1+g0*Nta0xi0)/(1+g1*Nta1xi1) )^(fi); 
+   */
+   
+   
+   
+retp(vf);
+endp;
+@--------------- END PROC gnew(x) -------------------@
+

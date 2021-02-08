@@ -1,0 +1,52 @@
+/***************************************************
+     Computes Dynamics Gains
+     Use Dats1.fmt obtained from the dynamic computation
+     
+ ***************************************************/
+
+new;cls;
+output file = Welfare.out reset;
+
+bet = 0.96;  @ discount factor @
+sig = 2;     @ CRRA @
+
+load dats1;
+Cs = dats1[.,1];
+
+Util = Utility(Cs);
+
+Wel0 = Util[1,.]/(1-bet);
+Wel1 = sumc((bet^seqa(0,1,rows(Util)-1)).*Util[2:rows(Util),.]);
+Wel1 = Wel1 + bet^(rows(Util)-1)*Util[rows(Util),.]/(1-bet);
+if sig==1; 
+   DWG = (Wel1/Wel0)*(1-bet);
+else;
+   DWG = ln(Wel1/Wel0)/(1-sig);
+endif;
+?" @===============================================@";
+?"         Dynamic gains (%)    ";;DWG*100;
+?" @===============================================@";
+?;
+?;
+
+
+?" @===============================================@";
+?"         Long Run gains (%)    ";;ln(Cs[rows(Cs),.]/Cs[1,.])*100;
+?" @===============================================@";
+?;
+?;
+
+
+@--------------- BEGIN PROC Utility(x) -------------------@
+proc(1)= Utility(Cts);
+local util;
+
+if sig == 1;
+   Util = ln(Cts);
+else;
+   Util = Cts^(1-sig)/(1-sig);
+endif;
+
+retp(Util);
+endp;
+@--------------- END PROC Utility(x) -------------------@
