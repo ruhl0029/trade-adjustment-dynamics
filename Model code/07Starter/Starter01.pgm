@@ -1,0 +1,2268 @@
+/***************************************************
+
+   GAUSS Prgram for George Alessandria, Horag Choi, and Kim J. Ruhl (2020) 
+   "Trade Adjustment Dynamics and the Welfare Gains from Trade," Working Paper
+
+   STARTER MODEL 
+     
+   The program is written for GAUSS version 5.0
+     
+   The program computes the transition dynamics of the economy.
+   The program requires 
+      i) non-linear system equations package (nlsys.set and nlproc.arc, Lee Edlefsen  3/29/86) and 
+      ii) Optimization application
+   For newer versions of these applications, you may need to modify the program where they are applied.
+     
+   Revised Date: 17 November 2020
+     
+ ***************************************************/
+new;cls;
+output file = Starter01.out reset;
+
+library  optmum, pgraph;
+#include nlsys.set;
+#include olss.src;
+
+rndseed 123456;
+
+di   = 1e-8;             @ convergence tolerence @
+/*===========================================================*
+ * Variables for the Solutions of Nonlinear System Equations *
+ *===========================================================*/
+    convtol=di;          @ convergence tolerance.                  @
+    prntit=0;            @ if 1 will print on every iteration @
+    prntout=0;           @ if 1, will print final output;
+                         NOTE: the solution vector is always
+                               assigned to x1, and will be in memory when
+                               the program is completed.               @
+    fname=&f;            @ change this if the name of the proc
+                           containing the functions is not = f     @
+    gradname=&grad1;     @ change this tO specify another proc to 
+                           compute the Jacobian matrix, if desired.@ 
+    jc0=0;               @ change this to specify a KxK matrix to be
+                           used as the initial value of the Jacobian,
+                           if desired.                             @ 
+    fname=&f;
+/*===========================================================*/
+format /rdn 20,8;
+
+bet  = 0.96;                  @ time discount factor @
+th   = 5.00;                  @ elasticity of substitution b/w varieties @
+sig  = 1.05;                     @ CRRA @
+gam  = 0.3;                   @ No need here: labor share parameter @
+
+del  = 0.10;                  @ capital depreciation rate @
+
+alp0 = 0.13247214;                  @ target 1-labor share of VA @
+alp  = 0.13247214;                 @ To be corrected: 1- labor sahre of VA @
+alpm = (1 - 1/2.8)*th/(th-1); @ to be corrected: material share parameter: Matching MFR-output/MFR-VA = 2.8 @
+
+L0ss = 1;                     @ SS Labor supply: Exogenous @
+L    = 1;
+
+lamD  = 5.51;                 @ To be calibrated:  prob of death slope parameter @
+n_x0  = 0.222567617;                @ exporter ratio @
+n_10  = 0.17;                 @ Stopper rate @
+n_00  = 0.10;                 @ To be reset: Starter rate @
+Exit50= 0.37;                 @ 5-year exit rate in the data @
+Ld00 = 0.023;                 @ shutdown plant's labor share @
+Ly00 = 0.015;                 @ entrant's labor share @
+
+eei0 = 0.130853907;                 @ Export intensity @
+eei5 = eei0*1;                @ 5 year exporter's expected intensity @
+OP0  = 2.844946151;
+STRate = 0.164;  @ Starter rate @
+STXShare = 0.069;   @ New exporters' export share @
+STXShare = 0.033;
+
+XSNewX =0.027;  @ % of new exporters' exports @
+XSNewX =0.033;  @ % of new exporters' exports @
+
+
+ta0  = 1.1;                   @ Initial gross tariff rate @
+ta1  = 1.0;                   @ new tariff rate @
+
+ta   = ta0;                   @ initial tariff rate @
+xi  = ( eei0/(1-eei0)*ta^th )^(1/(1-th));  @ iceberg cost @
+xiH  = ( eei0/2/(1-eei0/2)*ta^th )^(1/(1-th));  @ iceberg cost of H set to be 0.5*eei0 @
+
+xiL = 1.1;                    @ to be corrected: to get the average intensity @
+rhoH = 0.91571120;            @ to be corrected: to get the intensity in 5 years: 1/(1-rho) = E(waiting time) @
+rhoL = 0.91571120;            @ to be corrected: to get the intensity in 5 years: 1/(1-rho) = E(waiting time) @
+tiL = ( 1 + ta^(-th)*xiL^(1-th) ); @ to be corrected: multiplier for exporters @
+tiH = ( 1 + ta^(-th)*xiH^(1-th) ); @ to be corrected: multiplier for exporters @
+
+nxp = 1;  @ Prob. of being a new exporter after paying f0 @
+cxp = 1;  @ Prob. of being a contiuing exporter after paying f1 @
+
+@ Total employees in MFR: 16948.9*1000 @
+@ # of MFR producers: 370912 @
+L1992 = 16948.9*1000;
+E1992 = 370912;
+
+pmfe_dat =    @ Establishment Data @
+0.348044819|
+0.178063799|
+0.153149534|
+0.152720861|
+0.075600142|
+0.058779441|
+0.021021159|
+0.008449444|
+0.003248749|
+0.000922052;
+pmfl_dat =     @ employment Data @
+0.013334041|
+0.025977781|
+0.046173543|
+0.104383124|
+0.116112360|
+0.197957414|
+0.158763592|
+0.125210188|
+0.105639827|
+0.106448130;
+
+pmfx_dat =  @ export participation rate @
+          19.7450|
+          40.4419|
+          53.5769|
+          61.9534|
+          72.6595|
+          79.2398;
+pmfx_dat = pmfx_dat/100;
+
+muE =  0.34084489;       @ entrants' disadvantage @
+nd0 =  0.02176593;       @ constant shut-down shock @
+
+f_0 = 2.99979829;        @ normalized startup cost @
+f_1 = 1.20521080;        @ normalized continuation cost @
+f_R=  0.22218459;   
+
+distwgt = 10; @ search weight (1/distwgt) for distribution @
+distwgt = 20; @ search weight (1/distwgt) for distribution @
+ndistwgt = 10; @ search weight (ndistwgt) for others @
+
+
+
+   sde =     1.32000000; rho =     0.65442341;  muE =     1.34291214;
+   lamD=    21.04284098; nd0 =     0.02258301;  f_0 =     2.24384462; f_1  =     1.00694790; f_R  =     0.67129860;
+   xiH =     1.70474034; xiL =     1.06186645; rhoH =     0.91571120; rhoL =     0.91571120;  nxp =     1.00000000; cxp  =     1.00000000;
+
+
+   sde =     1.32000000; rho =     0.65442341;  muE =     1.34291214;
+   lamD=    21.04284098; nd0 =     0.02258301;  f_0 =     0.42539423; f_1  =     1.12008423; f_R  =     1.27618269;
+   xiH =     1.67194052; xiL =     1.04143575; rhoH =     0.91571120; rhoL =     0.91571120;  nxp =     0.33333333; cxp  =     1.00000000;
+
+   sde =     1.32000000; rho =     0.65442341;  muE =     1.34291214;
+   lamD=    21.04284098; nd0 =     0.02258301;  f_0 =     1.04642919; f_1  =     1.17966101; f_R  =     1.04642919;
+   xiH =     2.19764791; xiL =     1.00000000; rhoH =     0.91571120; rhoL =     0.91571120;  nxp =     1.00000000; cxp  =     1.00000000;
+
+
+   xihxil = xih/xil;
+   @f_R=f_0;@
+   rhoLeqH = 1;  @ 1 if rhoL = rhoH @
+
+   tn = 6;  @ tn years later @
+
+
+
+
+clear zp0, vxiL, x1, tiH, tiL, sdz, nodes, inprob, y1, yN, ome, zs, zsL, P, j, k, unP, i, unP2, D_E, para1,paras, eei;
+clear dH, dL, ip, dH, dL, Eintensity, OP;
+clear V0HL, V0, VH, VL, msp0, mspH, mspL, EV0, EVH, EVL, EV0f, EVHf, EVLf, V0_new, VH_new, VL_new;
+clear zp0, fracp0, idxp0, zpH, fracpH, idxpH, zpL, fracpL, idxpL, z0, frac0, idx0, zH, fracH, idxH, zL, fracL, idxL;
+clear DV0, DVH, DVL, z0, frac0, idx0, ms0, zH, fracH, idxH, msH, zL, fracL, idxL, msL;
+clear m0, mH, mL, DT0, DT1, DTH, DTL, iter, DT00, DT01, DTH0, DTH1, DTL0, DTL1, DT0new, DTHnew, DTLnew, tol;
+clear SD0, SD01, SD10, SD1H, SD1L, n_0, n_1, n_X; 
+clear DE0s, DEHs, DELs, DE00, DE01, DEH0, DEH1, DEL0, DEL1, DE0new, DEHnew, DELnew, Exit5; 
+clear Int0, IntH, IntL, IntT, eei, L_0, L_L, L_H, L_T, Ly0, DDT00, DDT01, DDTH0, DDTH1, DDTL0, DDTL1, Ld0, shutdown;
+clear wgtL, L_0D, L_LD, L_HD, L_cof, i, L_cmfe, L_cmfl, L_pmfe, L_pmfl, L_cofx, L_cmf3, L_cmf4, L_cmfx, L_pmf3, L_pmf4, L_pmfx;
+clear vft01, Eintensityall, EEi00;
+clear NSD01, XSD01, XD1, nxnew, Xnewshare, ND09, XD09, nx09, X09share;
+clear DE_0s, DE_Hs, DE_Ls, D0_0s, D0_Hs, D0_Ls, DH_0s, DH_Hs, DH_Ls, DL_0s, DL_Hs, DL_Ls;
+clear VRH, VRL, EVRH, EVRL, EVRHf, EVRLf, VRH_new, VRL_new, DVRH, DVRL, zRH,fracRH,idxRH,msRH, zRL,fracRL,idxRL,msRL,
+      DTRH, DTRL, DTRH0, DTRH1, DTRL0, DTRL1, DTRHnew, DTRLnew, DTN, DTX, SDRH1, SDRL1, 
+      DERHs, DERLs, DERH0, DERH1, DERL0, DERL1, DERHnew, DERLnew, DERHs, DERLs, DE_RHs, DE_RLs, 
+      IntN, DDTRH0, DDTRH1, DDTRL0, DDTRL1, L_RHD, L_RLD, L_ND, D0_RHs, D0_RLs, DH_RHs, DH_RLs, DL_RHs, DL_RLs, DRH_0s, DRH_Hs, DRH_Ls, DRH_RHs, DRH_RLs, 
+      DRL_0s, DRL_Hs, DRL_Ls, DRL_RHs, DRL_RLs, XDX, SDX, ND2, XD2, nxnew2, Xnewshare2, ND9, XD9, nxnew9, Xnewshare9;
+clear ND0tn, XD0tn, nx0tn, X0tnshare, NDtn, XDtn, nxnewtn, Xnewsharetn, ND1tn, XD1tn, nx1tn, X1tnshare;
+
+
+
+@----  producing output values given parameters  ----@ 
+@ Given parameter values computes distributions      @
+@ to match                                           @
+@----------------------------------------------------@
+
+para = sde|rho|nd0|muE|xiH|xiL|rhoH|rhoL|f_0|f_1|f_R|nxp|cxp;
+{para1}=simul(para);
+
+
+@==== matching n_X, n_1, Exit5, eei, nxnew, Xnewshare =====@
+@==== with f0, f1, rhoH, nxp, cxp, xiH            =========@
+/*
+Xss0 = ln(lamD|nd0|muE);
+vfT01  = zeros(rows(Xss0),1);
+{xout,fout,gout,cout}=optmum(&Search0,Xss0);
+
+Xss0 = ln(f_0|f_1|sde);
+vfT01  = zeros(rows(Xss0),1);
+{xout,fout,gout,cout}=optmum(&Search1,Xss0);
+
+
+
+Xss0 = ln(f_0|f_1|sde|xiH|xiL);
+vfT01  = zeros(rows(Xss0),1);
+{xout,fout,gout,cout}=optmum(&Search2,Xss0);
+
+
+Xss0 = ln(f_0|f_1|sde|xiH|xiL|lamD|nd0|muE);
+vfT01  = zeros(rows(Xss0),1);
+{xout,fout,gout,cout}=optmum(&Paraall,Xss0);
+*/
+
+
+@--------------- BEGIN PROC Search0(x) -------------------@
+proc(1)= Search0(xft01);
+local esum, lsum;
+
+lamD = exp(xft01[1]);
+nd0  = exp(xft01[2]);
+muE  = exp(xft01[3]);
+f_R = f_0/nxp;
+
+para = sde|rho|nd0|muE|xiH|xiL|rhoH|rhoL|f_0|f_1|f_R|nxp|cxp;
+{para1}=simul(para);
+
+vfT01[1] = Exit5 - Exit50;
+vfT01[2] = Ly0/L_T - Ly00;
+vfT01[3] = Ld0/L_T - Ld00;
+
+retp((vfT01'vfT01));
+endp;
+@--------------- END PROC Search0(x) -------------------@
+
+
+
+@--------------- BEGIN PROC Search1(x) -------------------@
+proc(1)= Search1(xft01);
+local esum, lsum;
+
+f_0 = exp(xft01[1]);
+f_1 = exp(xft01[2]);
+sde = exp(xft01[3]);
+f_R = f_0/nxp;
+
+para = sde|rho|nd0|muE|xiH|xiL|rhoH|rhoL|f_0|f_1|f_R|nxp|cxp;
+{para1}=simul(para);
+
+vfT01[1] = n_x0 - n_x;  @ Exxporter ratio @
+@vfT01[2] = n_1 - n_10;@
+vfT01[2] = nxnew - STRate;  @ % of new exporters among exporteres @
+vfT01[3] = OP0 - OP;  @ % of new exporters among exporteres @
+
+retp((vfT01'vfT01));
+endp;
+@--------------- END PROC Search1(x) -------------------@
+
+
+@--------------- BEGIN PROC Search2(x) -------------------@
+proc(1)= Search2(xft01);
+local esum, lsum;
+
+f_0 = exp(xft01[1]);
+f_1 = exp(xft01[2]);
+sde = exp(xft01[3]);
+xiH = exp(xft01[4]);
+xiL = exp(xft01[5]);
+f_R = f_0/nxp;
+
+para = sde|rho|nd0|muE|xiH|xiL|rhoH|rhoL|f_0|f_1|f_R|nxp|cxp;
+{para1}=simul(para);
+
+vfT01[1] = n_x0 - n_x;  @ Exporter ratio @
+@vfT01[2] = n_1 - n_10;@
+vfT01[2] = nxnew - STRate;  @ % of new exporters among exporteres @
+vfT01[3] = OP0 - OP;  @ % of new exporters among exporteres @
+vfT01[4] = eei0-eei;  @ Starter rate @
+vfT01[5] = STXShare-Xnewshare;   @ New exporters' export share @
+
+retp((vfT01'vfT01));
+endp;
+@--------------- END PROC Search1(x) -------------------@
+
+
+@--------------- BEGIN PROC Paraall(x) -------------------@
+proc(1)= Paraall(xft01);
+local esum, lsum;
+
+f_0 = exp(xft01[1]);
+f_1 = exp(xft01[2]);
+sde = exp(xft01[3]);
+xiH = exp(xft01[4]);
+xiL = exp(xft01[5]);
+
+lamD = exp(xft01[6]);
+nd0  = exp(xft01[7]);
+muE  = exp(xft01[8]);
+
+f_R = f_0/nxp;
+
+para = sde|rho|nd0|muE|xiH|xiL|rhoH|rhoL|f_0|f_1|f_R|nxp|cxp;
+{para1}=simul(para);
+
+vfT01[1] = n_x0 - n_x;  @ Exxporter ratio @
+@vfT01[2] = n_1 - n_10;@
+vfT01[2] = nxnew - STRate;  @ % of new exporters among exporteres @
+vfT01[3] = OP0 - OP;  @ % of new exporters among exporteres @
+vfT01[4] = eei0-eei;  @ Starter rate @
+vfT01[5] = STXShare-Xnewshare;   @ New exporters' export share @
+
+vfT01[6] = Exit5 - Exit50;
+vfT01[7] = Ly0/L_T - Ly00;
+vfT01[8] = Ld0/L_T - Ld00;
+
+@esum = meanc(((pmfe_dat-L_pmfe)/distwgt)^2);@
+@lsum = sumc(((pmfl_dat-L_pmfl)/distwgt)^2);@
+/*
+retp((vfT01'vfT01)*ndistwgt+esum@+lsum@);
+*/
+retp((vfT01'vfT01));
+
+endp;
+@--------------- END PROC Paraall(x) -------------------@
+
+
+
+
+
+@============== EVOLUTION ==================@
+
+
+tns = 2|6|9;  @ 2 for 1 year change, 6 for USA 1-6 years,  9 for others 1-9 years @
+nxnews = zeros(1,rows(tns));  @ # of new exporters among all exporters in tn @
+EXnews = nxnews;  @ EX share of new exporters in tn @
+nxolds = nxnews;  @ # of old exporters among all exporters in tn @
+EXolds = nxnews;  @ EX share of old exporters in tn @
+
+jj=1; do until jj>rows(tns);
+   tn = tns[jj];  @ final year @
+   
+   D1X_tn = DH_Hs[.,tn]+DH_Ls[.,tn]+DL_Hs[.,tn]+DL_Ls[.,tn];  @ exporters in tn years among exporters in tn=1 @
+   D0X_tn = D0_Hs[.,tn]+D0_Ls[.,tn]+DRH_Hs[.,tn]+DRH_Ls[.,tn];  @ exporters in tn years among non-exporters in tn=1 @
+   
+   EX1X_tn = (DH_Hs[.,tn]+DL_Hs[.,tn])'exp(zs)*(tiH-1) 
+             + (DH_Ls[.,tn]+DL_Ls[.,tn])'exp(zs)*(tiL-1);   @ EX of exporters in tn years among exporters in tn=1 @
+   EX0X_tn = (D0_Hs[.,tn]+DRH_Hs[.,tn])'exp(zs)*(tiH-1) 
+             + (D0_Ls[.,tn]+DRH_Ls[.,tn])'exp(zs)*(tiL-1);   @ EX of exporters in tn years among non-exporters in tn=1 @
+   EXall   = exp(zs)'DTH*(tiH-1) + exp(zs)'DTL*(tiL-1);    @ exports of all exporters @   
+               
+   nxnewtn = sumc(D0X_tn)/sumc(DTX); @ # of exporters in tn that were not exporters in tn=1 / total # of exporters @
+   nxoldtn = sumc(D1X_tn)/sumc(DTX); @ # of exporters in tn that were exporters in tn=1 / total # of exporters @
+   
+   EXnewtn = EX0X_tn/EXall;       @ share of exports (EX) for the exporters in tn that were not exporters in tn=1 @
+   EXoldtn = EX1X_tn/EXall;       @ share of exports (EX) for the exporters in tn that were exporters in tn=1 @
+   
+   nxnews[jj] = nxnewtn;
+   EXnews[jj] = EXnewtn;
+   nxolds[jj] = nxoldtn;
+   EXolds[jj] = EXoldtn;
+
+jj=jj+1; endo;
+
+
+"nxnews";;tns'-1;nxnews;
+"EXnews";;tns'-1;EXnews;
+"nxolds";;tns'-1;nxolds;
+"EXolds";;tns'-1;EXolds;
+?;
+?;
+
+
+format /rdn 15,8;
+?;
+?;
+?"   sde =";;sde;;"; rho =";;rho;;";  muE =";;muE;;";";
+?"   lamD=";;lamD;;"; nd0 =";;nd0;;";  f_0 =";;f_0;;"; f_1  =";;f_1;;"; f_R  =";;f_R;;";";
+?"   xiH =";;xiH;;"; xiL =";;xiL;;"; rhoH =";;rhoH;;"; rhoL =";;rhoL;;";  nxp =";;nxp;;"; cxp  =";;cxp;;";";
+?;
+?"   Note: Here f_0 and f_1 are normalized costs ";
+?;
+
+format /rdn 20,3;
+?"    ---------------------------------------------------";
+?"    ---------- 5 Parameters f0, f1, muE, nd0, lamD ----";
+?"    ---------- selected to match ----------------------";
+?"    ---------------------------------------------------";
+?"    Entrants' labor share            (1.5%) ";;Ly0/L_T*100;
+?"    Shutdown plants' labor share     (2.3%) ";;Ld0/L_T*100;
+?"    Exporter Export Intensity: xi    (13.3%)";;eei*100;
+?"    Stopper rate: n1                 (17.0%)";;n_1*100;
+?"    Exporter rate: nx                (22.3%)";;n_x*100;
+?"    Entrants' 5-year exit rate       (37.0%)";;Exit5*100;
+?"    Output Premium                   (2.845)";;OP;
+?"    Average Export Intensity         (13.1%)";;eei*100;
+?"    Export Share in Total            ( 8.3%)";;eei*n_x*OP*100;
+
+?"    % of new exporters               (13.7%)";;nxnew*100;
+?"    New exporters' export share      (2.7%) ";;Xnewshare*100;
+?"    % of 5y ago exporters            (33.9%)";;nx1tn*100;
+?"    5y ago exporters' export share   (13.7%)";;X1tnshare*100;
+?;
+?"    BALANCED DATA ";
+?"    % of new exporters               (16.4%)";;nxnew2*100;
+?"    New exporters' export share      (3.3%) ";;Xnewshare2*100;
+?"    % of 5y ago non-exporters        (57.2%)";;nxnewtn*100;
+?"    5y ago nonexporters' export share(38.4%)";;Xnewsharetn*100;
+?;
+?;
+?"    AND the DISTRIBUTIONS BELOW";
+?;
+?;
+
+
+
+
+format /rdn 20,8;
+?"    ------------ Establishments ------------";
+?"          Employee(bin)         Model                Data";;
+?(L_cof|maxc(L_LD[.,1]+1))~L_pmfe~pmfe_dat;
+?;
+stat_e = L_pmfe-pmfe_dat;
+?"    RMSE ";;sqrt(meanc(stat_e^2))*100;
+?;
+?"    ------------ Employment ------------";
+?"          Employee(bin)         Model                Data";;
+?(L_cof|maxc(L_LD[.,1]+1))~L_pmfl~pmfl_dat;
+?;
+stat_l = L_pmfl-pmfl_dat;
+?"    RMSE ";;sqrt(meanc(stat_l^2))*100;
+?;
+?"    ------------ Export Participation rate ------------";
+?"          Employee(bin)         Model                Data";;
+?(L_cofx|maxc(L_LD[.,1]+1))~L_pmfx~pmfx_dat;
+?;
+stat_x = pmfx_dat-L_pmfx;
+?"    RMSE ";;sqrt(meanc(stat_x^2))*100;
+?;
+?;
+?"    ------------ Establishment+Employment ------------";
+?"    RMSE ";;sqrt(meanc((stat_e|stat_l)^2))*100;
+?;
+?"          sde                 RMSE  ";
+?sde;;sqrt(meanc((stat_e|stat_l)^2))*100;
+?;
+?;
+
+
+
+
+
+
+
+
+
+@---- Normalizing Distribution  N=1 @
+
+DT  = sumc(DTN+DTX);
+DT0  = DT0/DT;
+DTH  = DTH/DT;
+DTL  = DTL/DT;
+DTRH  = DTRH/DT;
+DTX  = DTH+DTL;
+DTN  = DT0+DTRH;
+D_E  = D_E;
+DT00 = DT00/DT;
+DT01 = DT01/DT;
+DTH0 = DTH0/DT;
+DTH1 = DTH1/DT;
+DTL0 = DTL0/DT;
+DTL1 = DTL1/DT;
+DTRH0 = DTRH0/DT;
+DTRH1 = DTRH1/DT;
+
+n_E = sumc(D_E)/sumc(DT);
+DT = sumc(DTX+DTN);
+
+
+?" @========================================================================@";
+?" @=============================  Initial SS ==============================@";
+?" @========================================================================@";
+?;
+ta  = ta0;   @ initial tariff @
+tiL = ( 1 + ta^(-th)*xiL^(1-th) ); @ multiplier for exporters @
+tiH = ( 1 + ta^(-th)*xiH^(1-th) ); @ multiplier for exporters @
+
+R     = 1/bet - 1 + del;   @ Rental rate of capital @
+
+Int0  = exp(zs)'DT0;    @ Integration for non-exporters goods @
+IntH  = exp(zs)'DTH;    @ Integration for H goods @   
+IntL  = exp(zs)'DTL;    @ Integration for L goods @
+IntRH = exp(zs)'DTRH;
+IntT  = Int0+IntH+IntL+IntRH; @ Integration for all goods @   
+
+S = ( IntT + ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) )/( IntT + ta^(-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) );
+alpm = (1 - 1/2.8)*th/(th-1)*S;   @ matching Gross-VA = 2.8 @
+
+
+clear N_TE, Y, MCN, PT, MCT, ti2, f_0n, f_1n, f_Tn, Lp, V0i, VLi, VHi, EXY, K_T, L_T, D, VRHi, f_Rn, f_Rt, f_T; 
+
+@ ---- Initial values for SS ---- @
+K   = 0.5;
+f_E = 6.04225614;
+NT = 1;
+C  = 0.21880511;
+W  = 0.14808886;
+
+Xss0=ln(K|f_E|alp|C|W);
+
+Xss0 = 
+     -1.88461527|
+     2.04154742|
+    -1.20397280|
+    -1.86785272|
+    -2.36863953;
+
+Xss0=
+    -1.83154153|
+     2.03263555|
+    -1.20397280|
+    -1.81170969|
+    -2.30771125;
+
+convtol=di; prntit=0;
+vSS0  = zeros(rows(Xss0),1);
+Xss1 = nlsys(&ss0,Xss0,jc0,convtol,prntit,prntout);
+format /rdn 15,8;
+?xss1;
+?;
+
+gam = W*C^(-sig);
+
+lambda = IntT/( IntT + ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) );  @ domestic expenditure share @
+IMD = ( ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) )/IntT; @ imported/domestic @
+
+lambdas = lambda; @ stacking @
+IMDs = IMD;      @ stacking @
+
+TGrowth = ta^(-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL )/( IntT + ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) );
+@======  Resolving normalization =====@
+
+ti2 = 1/th/( NT*IntT + ta^(1-th)*NT*( xiL^(1-th)*IntL + xiH^(1-th)*IntH ) )*S*Y/( S-alpm*(th-1)/th );
+f_0 = f_0*ti2/W;
+f_1 = f_1*ti2/W;
+f_R = f_R*ti2/W;
+
+OP  = ( tiL*IntL + tiH*IntH )/( Int0+IntRH + tiL*IntL + tiH*IntH  )*sumc(DTN+DTX)/sumc(DTX); @ Output Premium @
+PP  = (zs'DTX)/sumc(DTX) - (zs'DTN)/sumc(DTN); @ Productivity premium @
+eei  = ta^(-th)*( xiL^(1-th)*IntL + xiH^(1-th)*IntH )/( IntL + IntH + ta^(-th)*( xiL^(1-th)*IntL + xiH^(1-th)*IntH ) ); @ intensity of all @
+
+?;
+?;
+?"  check z0,zL,zH,zRH  (with normalization)     ";;z0~zL~zH~zRH;
+{n_0new,n_1new,n_xnew} = n0n1nx(W*f_0|W*f_1|W*f_R|ti2);
+
+   DT  = sumc(DT0+DTH+DTL+DTRH);
+   DT0  = DT0/DT;
+   DTH  = DTH/DT;
+   DTL  = DTL/DT;
+   DTRH = DTRH/DT;
+   DTX  = DTH+DTL;
+   DTN  = DT0+DTRH;
+   D_E  = D_E;
+   DT00 = DT00/DT;
+   DT01 = DT01/DT;
+   DTH0 = DTH0/DT;
+   DTH1 = DTH1/DT;
+   DTL0 = DTL0/DT;
+   DTL1 = DTL1/DT;
+   DTRH0 = DTRH0/DT;
+   DTRH1 = DTRH1/DT;
+
+   n_E = sumc(D_E)/sumc(DT);
+   DT = sumc(DTX+DTN);
+
+?"  check z0,zL,zH,zRH (without normalization)   ";;z0~zL~zH~ZRH;
+?;
+?;
+format /rdn 15,8;
+?;
+?"    beta";;bet;;"  sigma";;sig;;" gamma";;gam;;"  theta";;th;
+?"    alpm";;alpm;;" alpha";;alp;;"  delta";;del;
+?"    f_T";;f_T;;"  f_0";;f_0;;"   f_1";;f_1;;"   f_R";;f_R;;"   f_E";;f_E;
+?"    xiL";;xiL;;"   xiH";;xiH;;"   rhoH";;rhoH;;"   rhoL";;rhoL;;"  ta";;ta;
+?"    sde";;sde;;"   rho";;rho;;"   lamD";;lamD;;"   muE";;muE;;"  nd0";;nd0;
+?;
+?;
+
+
+format /rdn 15,8;
+?"     tariff_rate    xiH        xiL         C        L        TR       LP    n_0      n_1       n_x";;
+?"              NT           N_TE          IntT  Int0  IntH IntL  IntX";;
+?"             NoV           K              Y               W           S     OP";;
+?"             PP             z0             zH             zL             zRH            eei    lambda         IMD";
+?ta~xiH~xiL~C~L~EXY~LP~n_0~n_1~n_x~NT~N_TE~(NT*IntT)~(NT*(Int0+IntRH))~(NT*IntH)~(NT*IntL)~(NT*(IntH+IntL))~(NT+n_x*NT)~K~Y~W~S~OP~PP~z0~zH~zL~zRH~eei~lambda~IMD;
+?;
+?;
+?;
+?"  Stats";
+?"theta";;th;
+?"alpha";;alp;
+?"alphax";;alpm;
+?"theta*kappaE";;th*f_E;
+?"100*kappH/kappaE";;100*f_0/f_E;
+?"xiH";;xiH;
+?"xiL";;xiL;
+?"rhoxi";;rhoH;
+?"eta";;1;
+?"kappaR/kappaL";;f_R/f_1;
+?;
+
+?" Payments of fixed costs relative to plant creation";
+Fcostall = W*f_0*sumc(DT01) + W*f_1*sumc(DTH1+DTL1) + W*f_R*sumc(DTRH1);
+Fcreation = W*f_E*n_E;
+?Fcostall/FCreation;
+?;
+
+?" Payments of fixed costs relative to export profits";
+Fcostall = W*f_0*sumc(DT01) + W*f_1*sumc(DTH1+DTL1) + W*f_R*sumc(DTRH1);
+Xprofits = 1/((1-alp)*(1-alpm))/(th-1)*W*Lp*(IMD/(1+IMD));
+?Fcostall/(Xprofits);
+
+?;
+"Starter ratio";
+startX=(tiH-1)*exp(zs)'*P'( n_S(zs).*( nxp*DT01+cxp*DTRH1) )/sumc(P'( n_S(zs).*( nxp*DT01+cxp*DTRH1) )); 
+aveX=( (tiL-1)*exp(zs)'DTL + (tiH-1)*exp(zs)'DTH )/sumc(DTH+DTL);
+?"startX/aveX";;startX/aveX;
+?;
+?"Starter Export Share";
+startX=(tiH-1)*exp(zs)'*P'( n_S(zs).*( nxp*DT01+cxp*DTRH1 ) ); 
+aveX=( (tiL-1)*exp(zs)'DTL + (tiH-1)*exp(zs)'DTH );
+?"startX/aveX";;startX/aveX;
+?;
+
+?" Exporter Premium";;
+OP2  = ( tiL*exp(zs)'DTL + tiH*exp(zs)'DTH )/( exp(zs)'DT0 + tiL*exp(zs)'DTL + tiH*exp(zs)'DTH )/sumc(DTH+DTL); @ Output Premium @
+?" Exporter/all average";;OP2;
+?;
+?"Aveage xi";
+?((eei./(1-eei))*ta^th)^(1/(1-th)); @ same xi equivalent iceberg cost @
+?;
+/*
+   DT0new  = P'( n_S(zs).*( DT00+DTRH0 + (1-nxp)*DT01+ (1-cxp)*DTRH1 ) ) + D_E; 
+   DTHnew  = P'( n_S(zs).*( nxp*DT01 + cxp*( rhoH*DTH1+DTRH1 + (1-rhoL)*DTL1 ) ) ); 
+   DTLnew  = P'( n_S(zs).*( cxp*( (1-rhoH)*DTH1 + rhoL*DTL1 ) ) ); 
+   DTRHnew = P'( n_S(zs).*( DTH0+DTL0 + (1-cxp)*(DTH1+DTL1) ) ); 
+*/   
+
+
+?" @============================================================@";
+?" @=============== Initial Steady State (Again) ===============@";
+?" @============================================================@";
+?;
+ta  = ta0;
+tiL = ( 1 + ta^(-th)*xiL^(1-th) ); @ multiplier for exporters @
+tiH = ( 1 + ta^(-th)*xiH^(1-th) ); @ multiplier for exporters @
+
+convtol=di; prntit=0;  
+format /rdn 15,8;
+iter2 = 1; do until iter2>10;
+
+   DT0_old = DT0;
+   DTH_old = DTH;
+   DTL_old = DTL;
+   DTRH_old=DTRH;
+   z0old = z0;
+   zLold = zL;
+   zHold = zH;
+   zRHold = zRH;
+   Kold = K;
+   Cold = C;
+   Wold = W;
+   NTold = NT;
+   
+   Xss0=ln(K|NT|C|W|L);
+   vSS1  = zeros(rows(Xss0),1);
+   Xss1 = nlsys(&SS1,Xss0,jc0,convtol,prntit,prntout);
+
+   {n_0,n_1,n_x} = n0n1nx(W*f_0|W*f_1|W*f_R|ti2);
+   @ normalizing distribution sum=1 @
+   DT  = sumc(DT0+DTH+DTL+DTRH);
+   DT0  = DT0/DT;
+   DTH  = DTH/DT;
+   DTL  = DTL/DT;
+   DTRH = DTRH/DT;
+   DTX  = DTH+DTL;
+   DTN  = DT0+DTRH;
+   D_E  = D_E;
+   DT00 = DT00/DT;
+   DT01 = DT01/DT;
+   DTH0 = DTH0/DT;
+   DTH1 = DTH1/DT;
+   DTL0 = DTL0/DT;
+   DTL1 = DTL1/DT;
+   DTRH0 = DTRH0/DT;
+   DTRH1 = DTRH1/DT;
+
+   n_E = sumc(D_E)/sumc(DT);
+   DT = sumc(DTX+DTN);
+
+   Int0  = exp(zs)'DT0;      @ Integration for domestic tradable goods @
+   IntH  = exp(zs)'DTH;    @ Integration for imported goods @   
+   IntL  = exp(zs)'DTL;    @ Integration for imported goods @   
+   IntRH = exp(zs)'DTRH;
+   IntT  = Int0+IntH+IntL+IntRH; 
+
+   tol1 = maxc(abs((DT0|DTH|DTL|DTRH)-(DT0_old|DTH_old|DTL_old|DTRH_old)));
+   tol3 = maxc(abs((z0|zH|zL|zRH)-(z0old|zHold|zLold|zRHold)));
+   tol4 = maxc(abs((K|NT|C|W)-(Kold|NTold|Cold|Wold)));
+   iter2 = 100*(maxc(tol1|tol3|tol4).<di);
+
+   OP  = ( tiL*IntL + tiH*IntH )/( Int0+IntRH + tiL*IntL + tiH*IntH  )*sumc(DTN+DTX)/sumc(DTX); @ Output Premium @
+   PP  = (zs'DTX)/sumc(DTX) - (zs'DTN)/sumc(DTN); @ Productivity premium @
+
+endo; @ iteration for iter2 @
+S = ( IntT + ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) )/( IntT + ta^(-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) );
+eei  = ta^(-th)*( xiL^(1-th)*IntL + xiH^(1-th)*IntH )/( IntL + IntH + ta^(-th)*( xiL^(1-th)*IntL + xiH^(1-th)*IntH ) ); @ intensity of all @
+
+
+lambda = IntT/( IntT + ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) );  @ domestic expenditure share @
+IMD = ( ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) )/IntT; @ imported/domestic @
+
+lambdas = lambda; @ stacking @
+IMDs = IMD;      @ stacking @
+TGrowth = ta^(-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL )/( IntT + ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) );
+TGrowths = TGrowth;
+
+format /rdn 15,8;
+?"     tariff_rate    xiH        xiL         C        L        TR       LP    n_0      n_1       n_x";;
+?"              NT           N_TE          IntT  Int0 IntH IntL  IntX";;
+?"             NoV           K              Y               W           S   OP";;
+?"             PP             z0             zH             zL             zRH            eei    lambda         IMD";
+?ta~xiH~xiL~C~L~EXY~LP~n_0~n_1~n_x~NT~N_TE~(NT*IntT)~(NT*(Int0+IntRH))~(NT*IntH)~(NT*IntL)~(NT*(IntH+IntL))~(NT+n_x*NT)~K~Y~W~S~OP~PP~z0~zH~zL~zRH~eei~lambda~IMD;
+?;
+C0ss = C;
+L0ss = L;
+
+SSout = ta~xiH~xiL~C~L~EXY~LP~n_0~n_1~n_x~NT~N_TE~(NT*IntT)~(NT*(Int0+IntRH))~(NT*IntH)~(NT*IntL)~(NT*(IntH+IntL))~(NT+n_x*NT)~K~Y~W~S~OP~PP~z0~zH~zL~zRH~eei~lambda~IMD;
+
+@ ====  Saving values of key variables ====@
+vec0  = C|L|W|N_TE|K|R;
+z0HLV0 = z0|zH|zL|zRH;
+Dist0V0 = NT*DT0;
+DistHV0 = NT*DTH;
+DistLV0 = NT*DTL;
+DistRHV0 = NT*DTRH;
+V0iV0  = V0i;  
+VHiV0  = VHi;  
+VLiV0  = VLi;  
+VRHiV0  = VRHi;  
+Addat0 = C~L~EXY~LP~n_0~n_1~n_X~S~OP~PP~NT~N_TE~(NT*IntT)~(Nt*(Int0+IntRH))~(Nt*IntH)~(NT*IntL)~(NT+n_x*NT)~K~Y~W~(del*K)~(IntT+ta^(-th)*(xiH^(1-th)*IntH+xiL^(1-th)*IntL))~z0~zH~zL~zRH~eei~lambda~IMD;
+
+?" @============================================================@";
+?" @=============== New Steady State ===========================@";
+?" @============================================================@";
+?;
+/*
+xiL = xiL*exp(-0.1);
+xiH = xiH*exp(-0.1);
+*/
+ta  = ta1;
+
+
+tiL = ( 1 + ta^(-th)*xiL^(1-th) ); @ multiplier for exporters @
+tiH = ( 1 + ta^(-th)*xiH^(1-th) ); @ multiplier for exporters @
+
+convtol=di; prntit=0;  
+format /rdn 15,8;
+iter2 = 1; do until iter2>10;
+
+   DT0_old = DT0;
+   DTH_old = DTH;
+   DTL_old = DTL;
+   DTRH_old=DTRH;
+   z0old = z0;
+   zLold = zL;
+   zHold = zH;
+   zRHold = zRH;
+   Kold = K;
+   Cold = C;
+   Wold = W;
+   NTold = NT;
+   
+   Xss0=ln(K|NT|C|W|L);
+   vSS1  = zeros(rows(Xss0),1);
+   Xss1 = nlsys(&SS1,Xss0,jc0,convtol,prntit,prntout);
+
+   {n_0,n_1,n_x} = n0n1nx(W*f_0|W*f_1|W*f_R|ti2);
+   @ normalizing distribution sum=1 @
+   DT  = sumc(DT0+DTH+DTL+DTRH);
+   DT0  = DT0/DT;
+   DTH  = DTH/DT;
+   DTL  = DTL/DT;
+   DTRH = DTRH/DT;
+   DTX  = DTH+DTL;
+   DTN  = DT0+DTRH;
+   D_E  = D_E;
+   DT00 = DT00/DT;
+   DT01 = DT01/DT;
+   DTH0 = DTH0/DT;
+   DTH1 = DTH1/DT;
+   DTL0 = DTL0/DT;
+   DTL1 = DTL1/DT;
+   DTRH0 = DTRH0/DT;
+   DTRH1 = DTRH1/DT;
+
+   n_E = sumc(D_E)/sumc(DT);
+   DT = sumc(DTX+DTN);
+
+   Int0  = exp(zs)'DT0;      @ Integration for domestic tradable goods @
+   IntH  = exp(zs)'DTH;    @ Integration for imported goods @   
+   IntL  = exp(zs)'DTL;    @ Integration for imported goods @   
+   IntRH = exp(zs)'DTRH;
+   IntT  = Int0+IntH+IntL+IntRH; 
+
+   tol1 = maxc(abs((DT0|DTH|DTL|DTRH)-(DT0_old|DTH_old|DTL_old|DTRH_old)));
+   tol3 = maxc(abs((z0|zH|zL|zRH)-(z0old|zHold|zLold|zRHold)));
+   tol4 = maxc(abs((K|NT|C|W)-(Kold|NTold|Cold|Wold)));
+   iter2 = 100*(maxc(tol1|tol3|tol4).<di);
+   
+   OP  = ( tiL*IntL + tiH*IntH )/( Int0+IntRH + tiL*IntL + tiH*IntH  )*sumc(DTN+DTX)/sumc(DTX); @ Output Premium @
+   PP  = (zs'DTX)/sumc(DTX) - (zs'DTN)/sumc(DTN); @ Productivity premium @
+
+endo; @ iteration for iter2 @
+
+S = ( IntT + ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) )/( IntT + ta^(-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) );
+eei  = ta^(-th)*( xiL^(1-th)*IntL + xiH^(1-th)*IntH )/( IntL + IntH + ta^(-th)*( xiL^(1-th)*IntL + xiH^(1-th)*IntH ) ); @ intensity of all @
+
+
+lambda = IntT/( IntT + ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) );  @ domestic expenditure share @
+IMD = ( ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) )/IntT; @ imported/domestic @
+TGrowth = ta^(-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL )/( IntT + ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) );
+
+lambdas = lambdas|lambda; @ stacking @
+IMDs = IMDs|IMD;      @ stacking @
+TGrowths = TGrowths|TGrowth;
+
+format /rdn 15,8;
+?"     tariff_rate    xiH        xiL         C        L        TR       LP    n_0      n_1       n_x";;
+?"              NT           N_TE          IntT  Int0  IntH IntL  IntX";;
+?"             NoV           K              Y               W         S     OP";;
+?"             PP             z0             zH             zL             zRH            eei    lambda         IMD";
+?ta~xiH~xiL~C~L~EXY~LP~n_0~n_1~n_x~NT~N_TE~(NT*IntT)~(Nt*(Int0+IntRH))~(NT*IntH)~(NT*IntL)~(NT*(IntH+IntL))~(NT+n_x*NT)~K~Y~W~S~OP~PP~z0~zH~zL~zRH~eei~lambda~IMD;
+?;
+
+WG = ln(C/C0ss)*100;
+
+?" @====================================================@";
+?"    LR Welfare Gains in Consumpson (%)";;WG; 
+?" @====================================================@";
+
+?" @====================================================@";
+?"    LR Elasticity ";;-ln(IMDs[2]/IMDs[1])/ln(ta1/ta0); 
+?" @====================================================@";
+
+@ ====  Saving values of key variables ====@
+vec1  = C|L|W|N_TE|K|R;
+z0HLV1 = z0|zH|zL|zRH;
+Dist0V1 = NT*DT0;
+DistHV1 = NT*DTH;
+DistLV1 = NT*DTL;
+DistRHV1 = NT*DTRH;
+V0iV1  = V0i;  
+VHiV1  = VHi;  
+VLiV1  = VLi;  
+VRHiV1  = VRHi;  
+Addat1 = C~L~EXY~LP~n_0~n_1~n_X~S~OP~PP~NT~N_TE~(NT*IntT)~(Nt*(Int0+IntRH))~(Nt*IntH)~(NT*IntL)~(NT+n_x*NT)~K~Y~W~(del*K)~(IntT+ta^(-th)*(xiH^(1-th)*IntH+xiL^(1-th)*IntL))~z0~zH~zL~zRH~eei~lambda~IMD;
+
+end;
+@ =================================================== @
+@ ==========  Iteration for Transitions ============= @
+@ =================================================== @
+
+clear EV0t1, EVHt1, EVLt1, DV0t1, DVHt1, DVLt1, z0t1new, zHt1new, zLt1new, frac0t1, fracHt1, fracLt1, idx0t1, idxHt1, idxLt1, ms0t1, msHt1, msLt1;
+clear EV0ft1, EVHft1, EVLft1, V0it1, VHit1, VLit1, D1, D2, D3, R1, R2, R3, K0, K1, K2, K3,
+      z0t1new, frac0t1, idx0t1, ms0t1, zHt1new, fracHt1, idxHt1, msHt1, zLt1new, fracLt1, idxLt1, msLt1, 
+      zp0t1new, fracp0t1, idxp0t1, msp0t1, zpHt1new, fracpHt1, idxpHt1, mspHt1, zpLt1new, fracpLt1, idxpLt1, mspLt1, m0t1, mHt1, mLt1; 
+clear msp0, mspH, mspL, ms0, msH, msL, D00, D01, DH0, DH1, DL0, DL1, 
+      D0new, DHnew, DLnew, D0new, DHnew, DLnew, D1new, 
+      SD0, SD01, SD10, SD1H, SD1L, n_0new, n_1new, n_Xnew;
+clear L1, W1, K1, N_TE1, L2, W2, N_TE2, N_TE0, 
+      zp0t0, zpHt0, zpLt0, z0t0, zHt0, zLt0, zp0t1, zpHt1, zpLt1, z0t1, zHt1, zLt1, zp0t2, zpHt2, zpLt2, z0t2, zHt2, zLt2, zp0t3, zpHt3, zpLt3,
+      K0, K2, L3, W3, C1, C2, C3, UC1, UC2, UC3, UL1, UL2, UL3, 
+      DT0t0, DTHt0, DTLt0, DT1t0, DT00t0, DT01t0, DTH0t0, DTH1t0, DTL0t0, DTL1t0, DT0t1, DTHt1, DTLt1, DT1t1, n_0t1, n_1t1, n_xt1,
+      DT00t1, DT01t1, DTH0t1, DTH1t1, DTL0t1, DTL1t1, DT0t2, DTHt2, DTLt2, DT1t2, n_0t2, n_1t2, n_xt2, 
+      DT00t2, DT01t2, DTH0t2, DTH1t2, DTL0t2, DTL1t2, DT0t3, DTHt3, DTLt3, DT1t3, n_0t3, n_1t3, n_xt3, 
+      IntT1, IntT2, IntT3, IntH1, IntL1, IntH2, IntL2, IntH3, IntL3, NT1, NT2, V0it2, VHit2, VLit2, V0it3, VHit3, VLit3,
+      Y1, S1, Lp1, R1, MCN1, PT1, MCT1, EXY1, PPt1, OPt1, Y2, S2, Lp2, R2, MCN2, PT2, MCT2, 
+      EV0t2, EVHt2, EVLt2, EV0ft2, EVHft2, EVLft2, msp0t2, mspHt2, mspLt2,
+      EVRHt1, EVRHft1, DVRHt1, zRHt1new,fracRHt1,idxRHt1,msRHt1, VRHit1,
+      zRHt0, zRHt1, zRHt2, DTRHt0, DTXt0, DTRH0t0, DTRH1t0, DTRHt1, DTXt1, DTRHt1, DTXt1, DTRH0t1, DTRH1t1, DTRHt2, DTXt2,
+      DTRHt2, DTXt2, DTRH0t2, DTRH1t2, DTRHt3, DTXt3, VRHit2, VRHit3, EVRHt2, EVRHft2, VRHit2, EVRHt1, EVRHft1, VRHit1,
+      msRH, DRH0, DRH1, DRHnew, DXnew, SDRH1,
+      D01new, DRH1new, DH0new, DL0new, DH1new, DL1new, DTXnew; 
+
+@============  Matrices for Transitions ============@
+T = 300+4;       @ # of periods for the transition @
+bound = T-2;   @ Set initial guess based on initial and new steady states @
+@bound = T-100;@
+@------- Matrices for transtion dynamics --------@
+Dats1 = ones(T,1).*vec0'; 
+z0HLs1 = ones(T,1).*z0HLV0'; 
+Dist0s1 = ones(T,1).*Dist0V0';
+DistHs1 = ones(T,1).*DistHV0';
+DistLs1 = ones(T,1).*DistLV0';
+DistRHs1 = ones(T,1).*DistRHV0';
+V0is1 = ones(T,1).*V0iV0';
+VHis1 = ones(T,1).*VHiV0';
+VLis1 = ones(T,1).*VLiV0';
+VRHis1 = ones(T,1).*VRHiV0';
+
+Dats1[rows(Dats1)-bound:rows(Dats1),.] = ones(bound+1,1).*vec1';      @ C W NTE K R @
+z0HLs1[rows(z0HLs1)-bound:rows(z0HLs1),.] = ones(bound+1,1).*z0HLV1'; @ Z0 ZH  ZL zRH@
+Dist0s1[rows(Dist0s1)-bound:rows(Dist0s1),.] = ones(bound+1,1).*Dist0V1';
+DistHs1[rows(DistHs1)-bound:rows(DistHs1),.] = ones(bound+1,1).*DistHV1';
+DistLs1[rows(DistLs1)-bound:rows(DistLs1),.] = ones(bound+1,1).*DistLV1';
+DistRHs1[rows(DistRHs1)-bound:rows(DistRHs1),.] = ones(bound+1,1).*DistRHV1';
+V0is1[rows(V0is1)-bound:rows(V0is1),.] = ones(bound+1,1).*V0iV1';
+VHis1[rows(VHis1)-bound:rows(VHis1),.] = ones(bound+1,1).*VHiV1';
+VLis1[rows(VLis1)-bound:rows(VLis1),.] = ones(bound+1,1).*VLiV1';
+VRHis1[rows(VRHis1)-bound:rows(VRHis1),.] = ones(bound+1,1).*VRHiV1';
+
+@load Dats1, z0HLs1, Dist0s1, DistHs1, DistLs1, DistRHs1, V0is1, VHis1, VLis1, VRHis1;  T=rows(Dats1); @
+@--- Trimming ---@
+Trt = T-20;
+Dats1[Trt:T,.]   =  ones(T-Trt+1,cols(Dats1)).*Dats1[T,.];
+z0HLs1[Trt:T,.]  =  ones(T-Trt+1,cols(z0HLs1)).*z0HLs1[T,.];
+Dist0s1[Trt:T,.] =  ones(T-Trt+1,cols(Dist0s1)).*Dist0s1[T,.];
+DistHs1[Trt:T,.] =  ones(T-Trt+1,cols(DistHs1)).*DistHs1[T,.];
+DistLs1[Trt:T,.] =  ones(T-Trt+1,cols(DistLs1)).*DistLs1[T,.];
+DistRHs1[Trt:T,.] =  ones(T-Trt+1,cols(DistRHs1)).*DistRHs1[T,.];
+V0is1[Trt:T,.]   =  ones(T-Trt+1,cols(V0is1)).*V0is1[T,.];
+VHis1[Trt:T,.]   =  ones(T-Trt+1,cols(VHis1)).*VHis1[T,.];
+VLis1[Trt:T,.]   =  ones(T-Trt+1,cols(VLis1)).*VLis1[T,.];
+VRHis1[Trt:T,.]   =  ones(T-Trt+1,cols(VRHis1)).*VRHis1[T,.];
+
+/*
+Textend = 100;
+@-----  Extending period -----@
+Dats1   =  Dats1|( ones(Textend,cols(Dats1)).*Dats1[T,.] );
+z0HLs1  =  z0HLs1|( ones(Textend,cols(z0HLs1)).*z0HLs1[T,.] );
+Dist0s1 =  Dist0s1|( ones(Textend,cols(Dist0s1)).*Dist0s1[T,.] );
+DistHs1 =  DistHs1|( ones(Textend,cols(DistHs1)).*DistHs1[T,.] );
+DistLs1 =  DistLs1|( ones(Textend,cols(DistLs1)).*DistLs1[T,.] );
+DistRHs1 =  DistRHs1|( ones(Textend,cols(DistRHs1)).*DistRHs1[T,.] );
+V0is1   =  V0is1|( ones(Textend,cols(V0is1)).*V0is1[T,.] );
+VHis1   =  VHis1|( ones(Textend,cols(VHis1)).*VHis1[T,.] );
+VLis1   =  VLis1|( ones(Textend,cols(VLis1)).*VLis1[T,.] );
+VRHis1   =  VRHis1|( ones(Textend,cols(VRHis1)).*VRHis1[T,.] );
+*/
+@load Dats1, z0HLs1, Dist0s1, DistHs1, DistLs1, DistRHs1, V0is1, VHis1, VLis1, VRHis1;  T=rows(Dats1); @
+
+Dats2  = Dats1;
+z0HLs2  = z0HLs1;
+Dist0s2 =  Dist0s1;
+DistHs2 =  DistHs1;
+DistLs2 =  DistLs1;
+DistRHs2 =  DistRHs1;
+V0is2   =  V0is1;
+VHis2   =  VHis1;
+VLis2   =  VLis1;
+VRHis2   =  VRHis1;
+
+count = 1;   @ iteration counting @
+wg    = 1;   @ weight for updating @
+strt0 = 1;   @ if 0, take N_TE1(idxst0) = 0 @
+idxst0 = 3;  @ period+1 where the N_TE=0 occurs @
+flexL = 1; 
+
+dit=1e-5; convtol=1e-6; prntit=0;
+iter = 1; do until iter>5;
+   if count>100; wg = 1; endif;
+   i=2; do until i>T-4;
+      j=1; do until j>5;  @ Dats = [C W NTE K R] @
+        
+         @ Using L @
+         x0=( ln(dats2[i,1 3 5])~(dats2[i,4])~ln(dats2[i+1,1 3])~(dats2[i+1,4]) )';   @ C|L|W|N_TE|K|R @
+         vf=zeros(rows(x0),1);
+         x1=nlsys(&trans,x0,jc0,convtol,prntit,prntout); 
+         {z0t1new, zHt1new, zLt1new, zRHt1new}=fIntX(V0it2,VHit2,VLit2,VRHit2);
+         j=100*( maxc(abs( (z0t1new|zHt1new|zLt1new|zRHt1new)-(z0t1|zHt1|zLt1|zRHt1) )).<dit );
+         
+         z0t1  = z0t1new;
+         zHt1  = zHt1new;
+         zLt1  = zLt1new;
+         zRHt1  = zRHt1new;
+         
+         z0HLs2[i,.] = (z0t1|zHt1|zLt1|zRHt1)';
+         dats2[i,1:6]   = C1~L1~W1~N_TE1~K1~R1;
+         V0is2[i+1,.] = V0it2';    @ value next period @
+         VHis2[i+1,.] = VHit2';    @ value next period @
+         VLis2[i+1,.] = VLit2';    @ value next period @
+         VRHis2[i+1,.] = VRHit2';    @ value next period @
+         V0is2[i,.] = V0it1';    @ value next period @
+         VHis2[i,.] = VHit1';    @ value next period @
+         VLis2[i,.] = VLit1';    @ value next period @
+         VRHis2[i,.] = VRHit1';    @ value next period @
+      endo; @ iteration for j @
+      
+      @ Updating L @
+      @L1 = Lbar-(1-gam)/gam*C1/W1;@
+
+      dats2[i,1:6] = C1~L1~W1~N_TE1~K1~R1;
+      @dats2[i+1,2] = L2;@
+      z0HLs2[i,.]  = (z0t1|zHt1|zLt1|zRHt1)';
+      Dist0s2[i,.] = DT0t1';    @ avaialble next period @
+      DistHs2[i,.] = DTHt1';    @ avaialble next period @
+      DistLs2[i,.] = DTLt1';    @ avaialble next period @
+      DistRHs2[i,.] = DTRHt1';    @ avaialble next period @
+      V0is2[i+1,.] = V0it2';    @ value next period @
+      VHis2[i+1,.] = VHit2';    @ value next period @
+      VLis2[i+1,.] = VLit2';    @ value next period @
+      VRHis2[i+1,.] = VRHit2';    @ value next period @
+      V0is2[i,.] = V0it1';    @ value next period @
+      VHis2[i,.] = VHit1';    @ value next period @
+      VLis2[i,.] = VLit1';    @ value next period @
+      VRHis2[i,.] = VRHit1';    @ value next period @      
+   i=i+1; endo;
+
+   converg = maxc( maxc( abs(dats1-dats2) ) );  @ you can add more variables to the convergence criterion. But, results are pretty much the same @ 
+   @converg=0;@
+   iter = 100*(converg.<dit);
+   format /rdn 20,8;
+   ?count;;maxc( maxc( abs(dats1-dats2) ) );
+   
+   Dats2   =  wg*Dats2+(1-wg)*Dats1;
+   z0HLs2  =  wg*z0HLs2+(1-wg)*z0HLs1;
+   Dist0s2 =  wg*Dist0s2+(1-wg)*Dist0s1;
+   DistHs2 =  wg*DistHs2+(1-wg)*DistHs1;
+   DistLs2 =  wg*DistLs2+(1-wg)*DistLs1;
+   DistRHs2 =  wg*DistRHs2+(1-wg)*DistRHs1;
+   V0is2   =  wg*V0is2+(1-wg)*V0is1;
+   VHis2   =  wg*VHis2+(1-wg)*VHis1;
+   VLis2   =  wg*VLis2+(1-wg)*VLis1;
+   VRHis2   =  wg*VRHis2+(1-wg)*VRHis1;
+ /*  
+   if count<50;  
+      Trt = T-100;
+      Dats2[Trt:T,.]   =  ones(T-Trt+1,cols(Dats1)).*Dats1[T,.];
+      z0HLs2[Trt:T,.]  =  ones(T-Trt+1,cols(z0HLs1)).*z0HLs1[T,.];
+      Dist0s2[Trt:T,.] =  ones(T-Trt+1,cols(Dist0s1)).*Dist0s1[T,.];
+      DistHs2[Trt:T,.] =  ones(T-Trt+1,cols(DistHs1)).*DistHs1[T,.];
+      DistLs2[Trt:T,.] =  ones(T-Trt+1,cols(DistLs1)).*DistLs1[T,.];
+      DistRHs2[Trt:T,.] =  ones(T-Trt+1,cols(DistRHs1)).*DistRHs1[T,.];
+      V0is2[Trt:T,.]   =  ones(T-Trt+1,cols(V0is1)).*V0is1[T,.];
+      VHis2[Trt:T,.]   =  ones(T-Trt+1,cols(VHis1)).*VHis1[T,.];
+      VLis2[Trt:T,.]   =  ones(T-Trt+1,cols(VLis1)).*VLis1[T,.];
+      VRHis2[Trt:T,.]   =  ones(T-Trt+1,cols(VRHis1)).*VRHis1[T,.];
+   endif;
+   */
+   /*
+   if count<200; 
+      Trt = T-50;
+      Dats2[Trt:T,3]   =  ones(T-Trt+1,1).*Dats1[T,3];
+   endif;
+   */
+   Dats1   =  Dats2;
+   z0HLs1  =  z0HLs2;
+   Dist0s1 =  Dist0s2;
+   DistHs1 =  DistHs2;
+   DistLs1 =  DistLs2;
+   DistRHs1 =  DistRHs2;
+   V0is1   =  V0is2;
+   VHis1   =  VHis2;
+   VLis1   =  VLis2;
+   VRHis1   =  VRHis2;
+   
+count = count +1; endo; @ Convergence of iter @
+
+save Dats1, z0HLs1, Dist0s1, DistHs1, DistLs1, DistRHs1, V0is1, VHis1, VLis1, VRHis1;
+
+
+
+
+@ ==========  Final Computations for Transitions ============= @
+Addats = Addat0;
+i=2; do until i>T-4;
+   x0=( ln(dats2[i,1 3 5])~(dats2[i,4])~ln(dats2[i+1,1 3])~(dats2[i+1,4]) )';  @ C|L|W|N_TE|K|R @
+   vf=zeros(rows(x0),1);
+   @x1=nlsys(&trans,x0,jc0,convtol,prntit,prntout); @
+   {vf}=trans(x0);
+   eeit1  = ta^(-th)*( xiL^(1-th)*IntL1 + xiH^(1-th)*IntH1 )/( IntL1 + IntH1 + ta^(-th)*( xiL^(1-th)*IntL1 + xiH^(1-th)*IntH1 ) ); @ intensity of all @
+   lambdat1 = IntT1/( IntT1 + ta^(1-th)*( xiH^(1-th)*IntH1 + xiL^(1-th)*IntL1 ) );  @ domestic expenditure share @
+   IMDt1 = ( ta^(1-th)*( xiH^(1-th)*IntH1 + xiL^(1-th)*IntL1 ) )/IntT1; @ imported/domestic @
+   Addats= Addats|
+          (C1~L1~EXY1~LP1~n_0t1~n_1t1~n_Xt1~S1~OPt1~PPt1~NT1~N_TE1~IntT1~(IntT1-IntH1-IntL1)~IntH1~IntL1~(NT1+n_xt1*NT1)
+          ~K0~Y1~W1~(K1-(1-del)*K0)~(IntT1+ta^(-th)*(xiH^(1-th)*IntH1+xiL^(1-th)*IntL1))~z0t1~zHt1~zLt1~zRHt1~eeit1~lambdat1~IMDt1 );
+i=i+1; endo;
+Addats = Addats|(ones(rows(dats1)-rows(Addats),cols(Addats)).*Addat1);
+TElast = ln(Addats[.,cols(Addats)]/Addats[1,cols(Addats)])/ln(ta0/ta1);
+Addats = Addats~TElast;
+
+output on; format 15,8;
+?"       Period   C  L   EXY  LP  n_0  n_1  n_X  S OP  PP  NT  N_TE";;
+?"    IntT    Int0+IntRH  IntH  IntL  (NT+n_x*NT)  K0   Y     W     X";;
+?"    (IntT+ta^(-th)*(xiH^(1-th)*IntH+xiL^(1-th)*IntL)) z0 zH zL zRH eei lambda IMD   Elsticity";;
+?seqa(0,1,rows(dats1))~Addats;
+
+save Addats;
+@? zs';
+? -ln(V0is1[1,.]./V0');
+? -ln(VHis1[1,.]./V0');
+? -ln(VLis1[1,.]./V0');@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@=========================== BEGIN PROC TRANS(X) ======================================================@
+/*  Transition Dynamics Computations   */
+            
+proc trans(x); @ Today 1 @
+
+@ N_TE1 : Entrants Today @
+@ NT1 : active firms today @
+@ Distxx0: Firm distribution last period @
+
+C1 = exp(x[1]); 
+W1 = exp(x[2]);
+K1 = exp(x[3]); 
+N_TE1 = (x[4]);    @ decision Today, used tomorrow @
+C2 = exp(x[5]); 
+W2 = exp(x[6]); 
+N_TE2 = (x[7]);    @ decision Today, used tomorrow @
+
+z0t0  = z0HLs2[i-1,1];  @ Yesterday @
+zHt0  = z0HLs2[i-1,2];  @ Yesterday @
+zLt0  = z0HLs2[i-1,3];  @ Yesterday @
+zRHt0  = z0HLs2[i-1,4];  @ Yesterday @
+
+z0t1  = z0HLs2[i,1];  @ Today @
+zHt1  = z0HLs2[i,2];  @ Today @
+zLt1  = z0HLs2[i,3];  @ Today @
+zRHt1  = z0HLs2[i,4];  @ Today @
+
+z0t2  = z0HLs2[i+1,1];  @ tomorrow @
+zHt2  = z0HLs2[i+1,2];  @ tomorrow @
+zLt2  = z0HLs2[i+1,3];  @ tomorrow @
+zRHt2  = z0HLs2[i+1,4];  @ tomorrow @
+
+N_TE0 = dats2[i-1,4];              @ Yesterday @
+K0    = dats2[i-1,5];
+
+@N_TE2 = dats2[i+1,4]; @
+@N_TE1=maxc(0|N_TE1);@
+@N_TE2=maxc(0|N_TE2);@
+
+
+L1 = dats2[i,2];
+R1 = dats2[i,6];
+
+L2 = dats2[i+1,2];
+K2 = dats2[i+1,5];
+R2 = dats2[i+1,6];
+
+C3 = dats2[i+2,1];
+L3 = dats2[i+2,2];
+W3 = dats2[i+2,3];
+R3 = dats2[i+2,6];
+/*
+W1 = gam*C1^sig;
+W2 = gam*C2^sig;
+*/
+
+UC1 = C1^(-sig);
+UC2 = C2^(-sig);
+UC3 = C3^(-sig);
+
+DT0t0 = Dist0s2[i-1,.]'; @ Yesterday @
+DTHt0 = DistHs2[i-1,.]'; 
+DTLt0 = DistLs2[i-1,.]'; 
+DTRHt0 = DistRHs2[i-1,.]'; 
+DTXt0 = DTHt0 + DTLt0;
+
+{DT00t0, DT01t0, DTH0t0, DTH1t0, DTL0t0, DTL1t0, DTRH0t0, DTRH1t0, DT0t1, DTHt1, DTLt1, DTRHt1, DTXt1, n_0t1, n_1t1, n_xt1} 
+      = DistTs(z0t0,zHt0,zLt0,zRHt0,N_TE0,DT0t0,DTHt0,DTLt0,DTRHt0);
+
+{DT00t1, DT01t1, DTH0t1, DTH1t1, DTL0t1, DTL1t1, DTRH0t1, DTRH1t1, DT0t2, DTHt2, DTLt2, DTRHt2, DTXt2, n_0t2, n_1t2, n_xt2} 
+      = DistTs(z0t1,zHt1,zLt1,zRHt1,N_TE1,DT0t1,DTHt1,DTLt1,DTRHt1);
+      
+{DT00t2, DT01t2, DTH0t2, DTH1t2, DTL0t2, DTL1t2, DTRH0t2, DTRH1t2, DT0t3, DTHt3, DTLt3, DTRHt2, DTXt3, n_0t3, n_1t3, n_xt3} 
+      = DistTs(z0t2,zHt2,zLt2,zRHt2,N_TE2,DT0t2,DTHt2,DTLt2,DTRHt2);
+
+IntT1 = exp(zs)'(DT0t1+DTHt1+DTLt1+DTRHt1);
+IntT2 = exp(zs)'(DT0t2+DTHt2+DTLt2+DTRHt2);
+IntT3 = exp(zs)'(DT0t3+DTHt3+DTLt3+DTRHt3);
+
+IntH1 = exp(zs)'DTHt1;
+IntL1 = exp(zs)'DTLt1;
+
+IntH2 = exp(zs)'DTHt2;
+IntL2 = exp(zs)'DTLt2;
+
+NT1  = sumc(DT0t1+DTHt1+DTLt1+DTRHt1);
+NT2  = sumc(DT0t2+DTHt2+DTLt2+DTRHt2);
+
+V0it2 = V0is2[i+1,.]';
+VHit2 = VHis2[i+1,.]';
+VLit2 = VLis2[i+1,.]';
+VRHit2 = VRHis2[i+1,.]';
+
+V0it3 = V0is2[i+2,.]';
+VHit3 = VHis2[i+2,.]';
+VLit3 = VLis2[i+2,.]';
+VRHit3 = VRHis2[i+2,.]';
+
+
+@W1 = ( th/(th-1)*(1/(1-alpm))^(1-alpm)*alpm^(-alpm)*( IntT1 + ta^(1-th)*( xiH^(1-th)*IntH1 + xiL^(1-th)*IntL1 ) )^(1/(1-th)) )^(-1/(1-alpm));@
+
+Y1 = C1 + K1 - (1-del)*K0;
+S1 = ( IntT1 + ta^(1-th)*( xiH^(1-th)*IntH1 + xiL^(1-th)*IntL1 ) )/( IntT1 + ta^(-th)*( xiH^(1-th)*IntH1 + xiL^(1-th)*IntL1 ) );
+D1 = S1*Y1/(S1-alpm*(th-1)/th);
+Lp1 = (1-alp)*(1-alpm)*(th-1)/th*D1/S1/W1;
+
+R1   = alp*(1-alpm)*(th-1)/th*D1/S1/K0;
+MCN1 = (R1/alp)^(alp)*(W1/(1-alp))^(1-alp);
+PT1  = ( th/(th-1)*(MCN1/(1-alpm))^(1-alpm)*alpm^(-alpm)*( IntT1 + ta^(1-th)*( xiH^(1-th)*IntH1 + xiL^(1-th)*IntL1 ) )^(1/(1-th)) )^(1/(1-alpm));
+MCT1 = (alpm)^(-alpm)*(MCN1/(1-alpm))^(1-alpm);
+
+EXY1 = ta^(-th)*( xiH^(1-th)*IntH1 + xiL^(1-th)*IntL1 )/( IntT1 + ta^(1-th)*( xiH^(1-th)*IntH1 + xiL^(1-th)*IntL1 ) )*D1/Y1;
+PPt1  = (zs'DTXt1)/sumc(DTXt1) - (zs'(DT0t1+DTRHt1))/sumc(DT0t1+DTRHt1);
+OPt1  = ( ( 1+ta^(-th)*xiH^(1-th) )*( exp(zs)'DTHt1 ) + ( 1+ta^(-th)*xiL^(1-th) )*( exp(zs)'DTLt1 ) )
+         /( exp(zs)'(DT0t1+DTRHt1) + ( 1+ta^(-th)*xiH^(1-th) )*( exp(zs)'DTHt1 ) + ( 1+ta^(-th)*xiL^(1-th) )*( exp(zs)'DTLt1 ) )*sumc(DT0t1+DTRHt1+DTXt1)/sumc(DTXt1);
+
+@-------  t+2 ------@
+
+@W2 = ( th/(th-1)*(1/(1-alpm))^(1-alpm)*alpm^(-alpm)*( IntT2 + ta^(1-th)*( xiH^(1-th)*IntH2 + xiL^(1-th)*IntL2 ) )^(1/(1-th)) )^(-1/(1-alpm));@
+
+Y2 = C2 + K2-(1-del)*K1;
+S2 = ( IntT2 + ta^(1-th)*( xiH^(1-th)*IntH2 + xiL^(1-th)*IntL2 ) )/( IntT2 + ta^(-th)*( xiH^(1-th)*IntH2 + xiL^(1-th)*IntL2 ) );
+D2 = S2*Y2/(S2-alpm*(th-1)/th);
+Lp2 = (1-alp)*(1-alpm)*(th-1)/th*D2/S2/W2;
+
+R2   = alp*(1-alpm)*(th-1)/th*D2/S2/K1;
+MCN2 = (R2/alp)^(alp)*(W2/(1-alp))^(1-alp);
+PT2  = ( th/(th-1)*(MCN2/(1-alpm))^(1-alpm)*alpm^(-alpm)*( IntT2 + ta^(1-th)*( xiH^(1-th)*IntH2 + xiL^(1-th)*IntL2 ) )^(1/(1-th)) )^(1/(1-alpm));
+MCT2 = (alpm)^(-alpm)*(MCN2/(1-alpm))^(1-alpm);
+
+
+EV0t2 = bet*UC3/UC2*n_S(zs).*(P*V0it3);  @ discounted expected value when m=0 row(z_today), col=1 @
+EVHt2 = bet*UC3/UC2*n_S(zs).*(P*VHit3);  @ discounted expected value when m=1 row(z_today), col=1 @
+EVLt2 = bet*UC3/UC2*n_S(zs).*(P*VLit3);  @ discounted expected value when m=1 row(z_today), col=1 @
+EVRHt2 = bet*UC3/UC2*n_S(zs).*(P*VRHit3);  @ discounted expected value when m=1 row(z_today), col=1 @
+ 
+@ expected value after payments decision @
+EV0ft2  = maxc( EV0t2'|((1-nxp)*EV0t2'+nxp*EVHt2'-W2*f_0) );  @ taking max @
+EVHft2  = maxc( EVRHt2'|((1-cxp)*EVRHt2'+cxp*(rhoH*EVHt2 + (1-rhoH)*EVLt2)'-W2*f_1 ) );  @ taking max @
+EVLft2  = maxc( EVRHt2'|((1-cxp)*EVRHt2'+cxp*((1-rhoL)*EVHt2 + rhoL*EVLt2)'-W2*f_1 ) );  @ taking max @
+EVRHft2 = maxc( EV0t2'|((1-cxp)*EV0t2'+cxp*EVHt2'-W2*f_R ) );  @ taking max @
+
+V0it2 =   1/th/( IntT2 + ta^(1-th)*( xiH^(1-th)*IntH2 + xiL^(1-th)*IntL2 ) )*D2*exp(zs) + EV0ft2;
+VHit2 = tiH/th/( IntT2 + ta^(1-th)*( xiH^(1-th)*IntH2 + xiL^(1-th)*IntL2 ) )*D2*exp(zs) + EVHft2;
+VLit2 = tiL/th/( IntT2 + ta^(1-th)*( xiH^(1-th)*IntH2 + xiL^(1-th)*IntL2 ) )*D2*exp(zs) + EVLft2;
+VRHit2 =   1/th/( IntT2 + ta^(1-th)*( xiH^(1-th)*IntH2 + xiL^(1-th)*IntL2 ) )*D2*exp(zs) + EVRHft2;
+
+EV0t1 = bet*UC2/UC1*n_S(zs).*(P*V0it2);  @ discounted expected value when m=0 row(z_today), col=1 @
+EVHt1 = bet*UC2/UC1*n_S(zs).*(P*VHit2);  @ discounted expected value when m=1 row(z_today), col=1 @
+EVLt1 = bet*UC2/UC1*n_S(zs).*(P*VLit2);  @ discounted expected value when m=1 row(z_today), col=1 @
+EVRHt1 = bet*UC2/UC1*n_S(zs).*(P*VRHit2);  @ discounted expected value when m=1 row(z_today), col=1 @
+
+@ expected value after payments decision @
+EV0ft1  = maxc( EV0t1'|((1-nxp)*EV0t1'+nxp*EVHt1'-W1*f_0) );  @ taking max @
+EVHft1  = maxc( EVRHt1'|((1-cxp)*EVRHt1'+cxp*(rhoH*EVHt1 + (1-rhoH)*EVLt1)'-W1*f_1 ) );  @ taking max @
+EVLft1  = maxc( EVRHt1'|((1-cxp)*EVRHt1'+cxp*((1-rhoL)*EVHt1 + rhoL*EVLt1)'-W1*f_1 ) );  @ taking max @
+EVRHft1 = maxc( EV0t1'|((1-cxp)*EV0t1'+cxp*EVHt1'-W1*f_R ) );  @ taking max @
+
+V0it1 =   1/th/( IntT1 + ta^(1-th)*( xiH^(1-th)*IntH1 + xiL^(1-th)*IntL1 ) )*D1*exp(zs) + EV0ft1;
+VHit1 = tiH/th/( IntT1 + ta^(1-th)*( xiH^(1-th)*IntH1 + xiL^(1-th)*IntL1 ) )*D1*exp(zs) + EVHft1;
+VLit1 = tiL/th/( IntT1 + ta^(1-th)*( xiH^(1-th)*IntH1 + xiL^(1-th)*IntL1 ) )*D1*exp(zs) + EVLft1;
+VRHit1 =   1/th/( IntT1 + ta^(1-th)*( xiH^(1-th)*IntH1 + xiL^(1-th)*IntL1 ) )*D1*exp(zs) + EVRHft1;
+
+
+vf[1] = bet*UC2/UC1*(V0it2'D_E) - W1*f_E;
+
+if (i==idxst0).and (strt0==0); 
+   vf[1] = N_TE1;
+endif;
+
+vf[2] = (Lp1 + f_E*N_TE1 + f_0*sumc(DT01t1) + f_1*sumc(DTH1t1+DTL1t1) + f_R*sumc(DTRH1t1)) - L1;
+
+vf[3] = (Lp2 + f_E*N_TE2 + f_0*sumc(DT01t2) + f_1*sumc(DTH1t2+DTL1t2) + f_R*sumc(DTRH1t2)) - L2;
+
+vf[4] = bet*UC3/UC2*(V0it3'D_E) - W2*f_E;
+
+vf[5] = PT1 - 1;
+
+vf[6] = PT2 - 1;
+
+vf[7] = bet*UC2/UC1*(R2 + 1 - del ) - 1;
+
+retp(vf);
+endp;
+@=========================== END PROC TRANS(X) ======================================================@
+
+
+
+
+@=========================== BEGIN PROC DistTs(x) ======================================================@
+ /* 1-Period Innovation of Distributions during  transitions */
+
+proc(16)=DistTs(z0,zH,zL,zRH, NTE1,D0,DH,DL,DRH);
+
+   ms0  = findm(z0);
+   msH  = findm(zH);
+   msL  = findm(zL);
+   msRH  = findm(zRH);
+   
+   D00 = (1-ms0).*D0;
+   D01 = ms0.*D0;
+   DH0 = (1-msH).*DH;
+   DH1 = msH.*DH;
+   DL0 = (1-msL).*DL;
+   DL1 = msL.*DL;
+   DRH0 = (1-msRH).*DRH;  @ H-exporters do not pay f1 @
+   DRH1 = msRH.*DRH;      @ H-exporters pay f1 @  
+    
+   @---- innovation after survival and productivity shocks----@
+   D0new  = P'( n_S(zs).*( D00+DRH0 + (1-nxp)*D01+ (1-cxp)*DRH1 ) ) + D_E*NTE1; 
+   DHnew  = P'( n_S(zs).*( nxp*D01 + cxp*( rhoH*DH1+DRH1 + (1-rhoL)*DL1 ) ) ); 
+   DLnew  = P'( n_S(zs).*( cxp*( (1-rhoH)*DH1 + rhoL*DL1 ) ) ); 
+   DRHnew = P'( n_S(zs).*( DH0+DL0 + (1-cxp)*(DH1+DL1) ) ); 
+   DXnew = DHnew+DLnew;
+
+
+SD0  = P'( n_S(zs).*(D0+DRH) ); @ survived last period non-exporters @
+SD01 = P'( n_S(zs).*D01*nxp ); @ survived starters from 0 @
+SDRH1 = P'( n_S(zs).*DRH1*nxp ); @ survived restarters from RH @
+SD10 = P'( n_S(zs).*( DH0+DL0+ (1-cxp)*(DH1+DL1) ) );   @ survived last period exporters being non-exporters @
+SDX = P'( n_S(zs).*( DH+DL ) ); @ survived last period exporters @
+
+n_0new = sumc(SD01+SDRH1)/sumc(SD0);                     @ starter rate @
+n_1new = sumc(SD10)/sumc(SDX);          @ stopper rate @
+n_Xnew = sumc(DXnew)/sumc(D0new+DRHnew+DXnew);                  @ exporter ratio @
+
+
+retp(D00, D01, DH0, DH1, DL0, DL1, DRH0, DRH1, D0new, DHnew, DLnew, DRHnew, DXnew, n_0new, n_1new, n_Xnew);
+endp;
+   
+@=========================== END PROC DistTs(x) ======================================================@
+
+
+@--------------- BEGIN PROC findm(x) -------------------@
+@---- Given Val, find Val(i)=0, and fraction   ----------@
+@--------------------------------------------------------@
+proc(1)= findm(zt);
+   local zall, mt, idx;
+ 
+   zall = zsL|(zsL[nodes]+ome);
+   mt   = zall.>zt;  @ take 1 for z(i)>zt otherwise take 0 @
+   idx  = nodes+1-sumc(mt);
+   if idx<nodes+1;
+      mt[idx] = (zall[idx+1]-zt)/ome;
+   endif;
+   mt = mt[1:nodes,.];
+retp(mt);   
+endp;
+@--------------- END PROC findm(x) -------------------@
+
+
+
+
+@=========================== BEGIN PROC fIntX(x) ======================================================@
+ /* 1-Period Innovation of Distributions during  transitions */
+
+proc(4)=fIntX(V0it2,VHit2,VLit2,VRit2);
+
+EV0t1 = bet*UC2/UC1*n_S(zs).*(P*V0it2);  @ discounted expected value when m=0 row(z_today), col=1 @
+EVHt1 = bet*UC2/UC1*n_S(zs).*(P*VHit2);  @ discounted expected value when m=1 row(z_today), col=1 @
+EVLt1 = bet*UC2/UC1*n_S(zs).*(P*VLit2);  @ discounted expected value when m=1 row(z_today), col=1 @
+EVRHt1 = bet*UC2/UC1*n_S(zs).*(P*VRHit2);
+ 
+@ expected value after payments decision @
+EV0ft1  = maxc( EV0t1'|((1-nxp)*EV0t1'+nxp*EVHt1'-W1*f_0) );  @ taking max @
+EVHft1  = maxc( EVRHt1'|((1-cxp)*EVRHt1'+cxp*(rhoH*EVHt1 + (1-rhoH)*EVLt1)'-W1*f_1 ) );  @ taking max @
+EVLft1  = maxc( EVRHt1'|((1-cxp)*EVRHt1'+cxp*((1-rhoL)*EVHt1 + rhoL*EVLt1)'-W1*f_1 ) );  @ taking max @
+EVRHft1 = maxc( EV0t1'|((1-cxp)*EV0t1'+cxp*EVHt1'-W1*f_R ) );  @ taking max @
+
+DV0t1  = ((1-nxp)*EV0t1+nxp*EVHt1-W1*f_0) - EV0t1;
+DVHt1  = ((1-cxp)*EVRHt1+cxp*(rhoH*EVHt1 + (1-rhoH)*EVLt1)-W1*f_1 ) - EVRHt1;
+DVLt1  = ((1-cxp)*EVRHt1+cxp*((1-rhoL)*EVHt1 + rhoL*EVLt1)-W1*f_1 ) - EVRHt1;
+DVRHt1 = ((1-cxp)*EV0t1+cxp*EVHt1-W1*f_R ) - EV0t1; 
+
+{z0t1new,frac0t1,idx0t1,ms0t1}= Cutoff(DV0t1);
+{zHt1new,fracHt1,idxHt1,msHt1}= Cutoff(DVHt1);
+{zLt1new,fracLt1,idxLt1,msLt1}= Cutoff(DVLt1);
+{zRHt1new,fracRHt1,idxRHt1,msRHt1}= Cutoff(DVRHt1);
+
+
+V0it1 =   1/th/( IntT1 + ta^(1-th)*( xiH^(1-th)*IntH1 + xiL^(1-th)*IntL1 ) )*D1*exp(zs) + EV0ft1;
+VHit1 = tiH/th/( IntT1 + ta^(1-th)*( xiH^(1-th)*IntH1 + xiL^(1-th)*IntL1 ) )*D1*exp(zs) + EVHft1;
+VLit1 = tiL/th/( IntT1 + ta^(1-th)*( xiH^(1-th)*IntH1 + xiL^(1-th)*IntL1 ) )*D1*exp(zs) + EVLft1;
+VRHit1 =   1/th/( IntT1 + ta^(1-th)*( xiH^(1-th)*IntH1 + xiL^(1-th)*IntL1 ) )*D1*exp(zs) + EVRHft1;
+  
+retp(z0t1new, zHt1new, zLt1new, zRHt1new);
+
+endp;
+   
+@=========================== END PROC fIntX(x) ======================================================@
+
+
+
+
+@=========================== BEGIN PROC SS1(x) ======================================================@
+/*
+   Compute the new Steady State
+*/
+
+proc SS1(x);
+
+local tol, i, iter, V0i_new, VLi_new, VHi_new, VRHi_new;
+
+K   = exp(x[1]);  @ capital @
+NT  = exp(x[2]);  @ mass of tradable good producers @
+C   = exp(x[3]);  @ consumption @
+W   = exp(x[4]);  @ Wage rate @
+L   = exp(x[5]);  @ Wage rate @
+
+N_TE = NT*n_E;    @ mass of tradable good entrants @
+
+Y    = C + del*K;    @ Absorption @
+S    = ( IntT + ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) )
+/( IntT + ta^(-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) );
+D    = S*Y/( S-alpm*(th-1)/th );
+MCN  = (R/alp)^(alp)*(W/(1-alp))^(1-alp);  
+PT   = ( th/(th-1)*(MCN/(1-alpm))^(1-alpm)*alpm^(-alpm)*
+( NT*IntT + ta^(1-th)*NT*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) )^(1/(1-th)) )^(1/(1-alpm));
+MCT  = (alpm/PT)^(-alpm)*(MCN/(1-alpm))^(1-alpm);
+
+ti2 = 1/th/( NT*IntT + ta^(1-th)*NT*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) )*D;  @ multiplier for profit @
+
+Lp   = L - f_E*N_TE - f_0*NT*sumc(DT01) - f_1*NT*sumc(DTH1+DTL1) - f_R*NT*sumc(DTRH1);  @ Labor in production @
+
+V0i = ti2*exp(zs)/bet;     @ row (Z), cols (f) current period non-exporter  row(z_today), col(f_today) @
+VHi = ti2*exp(zs)*tiH/bet;  @ row (Z), cols (f) current period exporter  row(z_today), col(f_today) @
+VLi = ti2*exp(zs)*tiL/bet;  @ row (Z), cols (f) current period exporter  row(z_today), col(f_today) @
+VRHi = ti2*exp(zs)/bet;
+
+iter=1; do until iter>10;
+   EV0 = bet*n_S(zs).*(P*V0i);  @ discounted expected value when m=0 row(z_today), col=1 @
+   EVH = bet*n_S(zs).*(P*VHi); @ discounted expected value when m=1 row(z_today), col=1 @
+   EVL = bet*n_S(zs).*(P*VLi); @ discounted expected value when m=1 row(z_today), col=1 @
+   EVRH = bet*n_S(zs).*(P*VRHi);  @ discounted expected value when m=1 row(z_today), col=1 @
+
+   @ expected value after payments decision @  
+   EV0f  = maxc( EV0'|((1-nxp)*EV0'+nxp*EVH'-W*f_0) );  @ taking max @
+   EVHf  = maxc( EVRH'|((1-cxp)*EVRH'+cxp*(rhoH*EVH + (1-rhoH)*EVL)'-W*f_1 ) );  @ taking max @
+   EVLf  = maxc( EVRH'|((1-cxp)*EVRH'+cxp*((1-rhoL)*EVH + rhoL*EVL)'-W*f_1 ) );  @ taking max @
+   EVRHf = maxc( EV0'|((1-cxp)*EV0'+cxp*EVH'-W*f_R ) );  @ taking max @
+
+   V0i_new  = ti2*exp(zs) + EV0f;
+   VHi_new  = ti2*exp(zs)*tiH + EVHf;
+   VLi_new  = ti2*exp(zs)*tiL + EVLf;
+   VRHi_new = ti2*exp(zs) + EVRHf;
+
+   tol = maxc( abs( vec(V0i|VHi|VLi|VRHi) - vec(V0i_new|VHi_new|VLi_new|VRHi_new) ) );
+   iter = 100*(tol.<1e-10);
+
+   V0i = V0i_new;
+   VHi = VHi_new;
+   VLi = VLi_new;
+   VRHi= VRHi_new;
+endo;
+
+EXY = ta^(-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL )/
+( IntT + ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) )*D/Y; @ Export-GDP ratio @
+
+K_T = alp*(1-alpm)*(th-1)/th/R*D/S;
+L_T = (1-alp)/alp*R/W*K_T;
+
+vSS1[1] = PT - 1;
+
+vSS1[2] = -f_E*W + bet*(V0i'D_E);
+
+vSS1[3] = K_T - K;
+
+vSS1[4] = W*Lp + R*K + 1/((1-alp)*(1-alpm))/(th-1)*W*L_T + (ta-1)*EXY*Y - Y;
+/*
+vSS1[5] = gam*C^(sig) - W; 
+*/
+
+vSS1[5] = L - L0ss; 
+
+retp(vSS1);
+endp;
+@=========================== END PROC SS1(x) ======================================================@
+
+
+
+
+@--------------- BEGIN PROC n0n1nx(x) -------------------@
+proc(3) = n0n1nx(xn0n1nx);
+local iter, i, f_0t, f_1t, ti2;
+
+f_0t = xn0n1nx[1];  @ W*f_0 @
+f_1t = xn0n1nx[2];  @ W*f_1 @
+f_Rt = xn0n1nx[3];  @ W*f_R @
+ti2  = xn0n1nx[4];  @ multiplier for value (profit) @
+
+V0 = 1/bet.*ti2.*exp(zs);      @ row (Z), cols (f) current period non-exporter  row(z_today), col(f_today) @
+VH = 1/bet.*ti2.*exp(zs)*tiH;  @ row (Z), cols (f) current period exporter  row(z_today), col(f_today) @
+VL = 1/bet.*ti2.*exp(zs)*tiL;  @ row (Z), cols (f) current period exporter  row(z_today), col(f_today) @
+VRH = 1/bet.*ti2.*exp(zs); 
+
+iter=1; do until iter>10;
+   EV0 = bet*n_S(zs).*(P*V0);  @ discounted expected value when m=0 row(z_today), col=1 @
+   EVH = bet*n_S(zs).*(P*VH); @ discounted expected value when m=1 row(z_today), col=1 @
+   EVL = bet*n_S(zs).*(P*VL); @ discounted expected value when m=1 row(z_today), col=1 @
+   EVRH = bet*n_S(zs).*(P*VRH);  @ discounted expected value when m=1 row(z_today), col=1 @
+
+   @ expected value after payments decision @  
+   EV0f  = maxc( EV0'|((1-nxp)*EV0'+nxp*EVH'-f_0t) );  @ taking max @
+   EVHf  = maxc( EVRH'|((1-cxp)*EVRH'+cxp*(rhoH*EVH + (1-rhoH)*EVL)'-f_1t ) );  @ taking max @
+   EVLf  = maxc( EVRH'|((1-cxp)*EVRH'+cxp*((1-rhoL)*EVH + rhoL*EVL)'-f_1t ) );  @ taking max @
+   EVRHf = maxc( EV0'|((1-cxp)*EV0'+cxp*EVH'-f_Rt ) );  @ taking max @
+
+   V0_new  = ti2*exp(zs) + EV0f;
+   VH_new  = ti2*exp(zs)*tiH + EVHf;
+   VL_new  = ti2*exp(zs)*tiL + EVLf;
+   VRH_new = ti2*exp(zs) + EVRHf;
+
+   tol = maxc( abs( vec(V0|VH|VL|VRH) - vec(V0_new|VH_new|VL_new|VRH_new) ) );
+   iter = 100*(tol.<1e-10);
+
+   V0 = V0_new;
+   VH = VH_new;
+   VL = VL_new;
+   VRH= VRH_new;
+endo;
+
+DV0  = ((1-nxp)*EV0+nxp*EVH-f_0t) - EV0;
+DVH  = ((1-cxp)*EVRH+cxp*(rhoH*EVH + (1-rhoH)*EVL)-f_1t ) - EVRH;
+DVL  = ((1-cxp)*EVRH+cxp*((1-rhoL)*EVH + rhoL*EVL)-f_1t ) - EVRH;
+DVRH = ((1-cxp)*EV0+cxp*EVH-f_Rt ) - EV0; 
+
+
+{z0,frac0,idx0,ms0}= Cutoff(DV0);
+{zH,fracH,idxH,msH}= Cutoff(DVH);
+{zL,fracL,idxL,msL}= Cutoff(DVL);
+{zRH,fracRH,idxRH,msRH}= Cutoff(DVRH);
+
+
+@------ Initial distribution rows(zs) -----@
+DT0 = D_E;
+DTH = 0*DT0;
+DTL = 0.1*DT0;
+DTRH = 0*DT0;
+
+
+iter=1; do until iter>10;
+   
+   @---- exporting decisions before exporting shocks ----@
+   DT00 = (1-ms0).*DT0;  @ non-exporters do not pay f0 @
+   DT01 = ms0.*DT0;      @ non-exporters pay f0 @ 
+   DTH0 = (1-msH).*DTH;  @ H-exporters do not pay f1 @
+   DTH1 = msH.*DTH;      @ H-exporters pay f1 @  
+   DTL0 = (1-msL).*DTL;  @ L-exporters do not pay f1 @
+   DTL1 = msL.*DTL;      @ L-exporters pay f1 @  
+   DTRH0 = (1-msRH).*DTRH;  @ H-exporters do not pay f1 @
+   DTRH1 = msRH.*DTRH;      @ H-exporters pay f1 @  
+ 
+   @---- innovation after survival and productivity shocks----@ 
+   DT0new  = P'( n_S(zs).*( DT00+DTRH0 + (1-nxp)*DT01+ (1-cxp)*DTRH1 ) ) + D_E; 
+   DTHnew  = P'( n_S(zs).*( nxp*DT01 + cxp*( rhoH*DTH1+DTRH1 + (1-rhoL)*DTL1 ) ) ); 
+   DTLnew  = P'( n_S(zs).*( cxp*( (1-rhoH)*DTH1 + rhoL*DTL1 ) ) ); 
+   DTRHnew = P'( n_S(zs).*( DTH0+DTL0 + (1-cxp)*(DTH1+DTL1) ) ); 
+   
+   tol = maxc(abs( (DT0|DTH|DTL|DTRH) - (DT0new|DTHnew|DTLnew|DTRHnew) ) );
+   iter = 100*(tol.<1e-14);
+   
+   DT0  = DT0new;  @ current 0 @
+   DTH  = DTHnew;  @ current H @
+   DTL  = DTLnew;  @ current L @
+   DTRH = DTRHnew;  @ current RH @
+  
+endo;
+
+
+DTX = DTH+DTL;
+DTN = DT0+DTRH;
+
+SD0  = P'( n_S(zs).*DTN ); @ survived last period non-exporters @
+SD01 = P'( n_S(zs).*DT01*nxp ); @ survived starters from 0 @
+SDRH1 = P'( n_S(zs).*DTRH1*nxp ); @ survived restarters from RH @
+
+SD10 = P'( n_S(zs).*( DTH0+DTL0 + (1-cxp)*(DTH1+DTL1) ) );   @ survived last period exporters being non-exporters @
+SDX = P'( n_S(zs).*( DTX ) ); @ survived last period exporters @
+
+n_0 = sumc(SD01+SDRH1)/sumc(SD0);                     @ starter rate @
+n_1 = sumc(SD10)/sumc(SDX);          @ stopper rate @
+n_X = sumc(DTX)/sumc(DTN+DTX);                  @ exporter ratio @
+
+
+retp(n_0,n_1,n_X);
+endp;
+@--------------- END PROC n0n1nx(x) -------------------@
+
+
+
+
+
+
+
+
+
+
+@=========================== BEGIN PROC SS0(x) ======================================================@
+/*
+   Compute the initial Steady State
+*/
+
+proc SS0(x);
+
+local tol, i;
+K   = exp(x[1]);  @ capital @
+f_E = exp(x[2]);  @ entry sunk cost @
+alp = exp(x[3]);  @ capital share parameter in production @
+C   = exp(x[4]);  @ consumption @
+W   = exp(x[5]);  @ Wage rate @
+
+N_TE = n_E;    @ mass of tradable good entrants @
+
+Y    = C + del*K;    @ Absorption @
+D    = S*Y/( S-alpm*(th-1)/th );
+MCN  = (R/alp)^(alp)*(W/(1-alp))^(1-alp);  
+PT   = ( th/(th-1)*(MCN/(1-alpm))^(1-alpm)*alpm^(-alpm)*( IntT + ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) )^(1/(1-th)) )^(1/(1-alpm));
+MCT  = (alpm/PT)^(-alpm)*(MCN/(1-alpm))^(1-alpm);
+
+ti2 = 1/th/( IntT + ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) )*D;  @ multiplier for profit @
+
+f_0n = f_0/W*ti2;
+f_1n = f_1/W*ti2;
+f_Rn = f_R/W*ti2;
+Lp   = L - f_E*N_TE - f_0n*sumc(DT01) - f_1n*sumc(DTH1+DTL1) - f_Rn*sumc(DTRH1);  @ Labor in production @
+
+V0i  = V0*ti2;
+VLi  = VL*ti2;
+VHi  = VH*ti2;
+VRHi = VRH*ti2;
+
+EXY = ta^(-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL )/( IntT + ta^(1-th)*( xiH^(1-th)*IntH + xiL^(1-th)*IntL ) )*D/Y; @ Export-GDP ratio @
+
+K_T = alp*(1-alpm)*(th-1)/th/R*D/S;
+L_T = (1-alp)/alp*R/W*K_T;
+
+vSS0[1] = PT - 1;
+
+vSS0[2] = -f_E*W + bet*(V0i'D_E);
+/*
+vSS0[3] = W*L/Y - (1-alp0);
+*/
+vSS0[3] = alp - alp0;
+
+vSS0[4] = K_T - K;
+
+vSS0[5] = W*Lp + R*K + 1/((1-alp)*(1-alpm))/(th-1)*W*L_T + (ta-1)*EXY*Y - Y;
+
+retp(vSS0);
+endp;
+@=========================== END PROC SS0(x) ======================================================@
+
+
+
+
+
+
+
+@--------------- BEGIN PROC simul(x) -------------------@
+proc(1)= simul(paras);
+
+sde  = paras[1];
+rho  = paras[2]; 
+nd0  = paras[3];
+muE  = paras[4];
+xiH  = paras[5];
+xiL  = paras[6];
+rhoH = paras[7];
+rhoL = paras[8];
+f_0  = paras[9];
+f_1  = paras[10];
+f_R  = paras[11];
+nxp  = paras[12];
+cxp  = paras[13];
+
+
+if rhoLeqH ==1; rhoL = rhoH; endif;
+
+@-------  Find xiL to match year-5 intensity given xiH ---@
+convtol=di;    prntit=0;
+vxiL=ones(1,1);
+@x1 = nlsys(&findxiL,ln(xiL),jc0,convtol,prntit,prntout);@
+
+tiH = ( 1 + ta^(-th)*xiH^(1-th) ); @ multiplier for exporters with H @
+tiL = ( 1 + ta^(-th)*xiL^(1-th) ); @ multiplier for exporters with L @
+
+@-----------------------------------------------------------------@
+@------ Computing unconditional and Conditional Distribution -----@
+@-----------------------------------------------------------------@
+sdz  = sqrt(sde^2/(1-rho^2));            @ Unconditional SD conditional on survival @
+nodes  = 200;                            @ # of Nodes for discritization @
+inprob = 1e-8;                           @ initial node set up cdfni(m)*sqrt(sde^2/(1-rho^2)) @
+
+y1     = cdfni(inprob)*sde*1.5;          @ lowest value for z @ 
+yN     = -cdfni(inprob)*sde*1.5;         @ highest value for z@
+ome     = (yN-y1)/(nodes-1);             @ interval @
+zs     = seqa(y1,ome,nodes);             @ nodes @
+zsL    = zs-ome/2;                       @ min points of each node @
+
+@----- Computing Transition matrix ------@
+P     = zeros(nodes,nodes);              @ Transition matrix pjk = Pr(yk|yj) @
+j=1; do until j>nodes;
+   k=1; do until k>nodes;
+      P[j,k] = cdfn( (zs[k]-rho*zs[j]+ome/2)/sde ) - cdfn( (zs[k]-rho*zs[j]-ome/2)/sde );
+      if P[j,k]<1e-10; P[j,k]=0; endif;
+   k=k+1; endo;
+j=j+1; endo;
+P = P./(sumc(P'));                       @ Transition Matrix @
+
+@------ Entrant' distribution: mass normalized to 1 -------@
+D_E = zeros(nodes,1);
+j=1; do until j>nodes;
+  D_E[j] = cdfn( (zs[j]+muE+ome/2)/sdz ) - cdfn( (zs[j]+muE-ome/2)/sdz );
+j=j+1; endo;
+D_E = D_E/(sumc(D_E));
+
+@ Finding the value functions given f_0 and f_1 @
+V0HL = Val0HL(ln(f_0|f_1|f_R));
+
+V0  = V0HL[.,1];
+VH  = V0HL[.,2];
+VL  = V0HL[.,3];
+VRH = V0HL[.,4];
+
+DV0  = ((1-nxp)*EV0+nxp*EVH-f_0) - EV0;
+DVH  = ((1-cxp)*EVRH+cxp*(rhoH*EVH + (1-rhoH)*EVL)-f_1 ) - EVRH;
+DVL  = ((1-cxp)*EVRH+cxp*((1-rhoL)*EVH + rhoL*EVL)-f_1 ) - EVRH;
+DVRH = ((1-cxp)*EV0+cxp*EVH-f_R ) - EV0; 
+
+{z0,frac0,idx0,ms0}= Cutoff(DV0);
+{zH,fracH,idxH,msH}= Cutoff(DVH);
+{zL,fracL,idxL,msL}= Cutoff(DVL);
+{zRH,fracRH,idxRH,msRH}= Cutoff(DVRH);
+
+@------ Initial distribution rows(zs) -----@
+DT0 = D_E;
+DTH = 0*DT0;
+DTL = 0.1*DT0;
+DTRH = 0*DT0;
+
+iter=1; do until iter>10;
+   
+   @---- exporting decisions before exporting shocks ----@
+   DT00 = (1-ms0).*DT0;  @ non-exporters do not pay f0 @
+   DT01 = ms0.*DT0;      @ non-exporters pay f0 @ 
+   DTH0 = (1-msH).*DTH;  @ H-exporters do not pay f1 @
+   DTH1 = msH.*DTH;      @ H-exporters pay f1 @  
+   DTL0 = (1-msL).*DTL;  @ L-exporters do not pay f1 @
+   DTL1 = msL.*DTL;      @ L-exporters pay f1 @  
+   DTRH0 = (1-msRH).*DTRH;  @ H-exporters do not pay f1 @
+   DTRH1 = msRH.*DTRH;      @ H-exporters pay f1 @  
+ 
+   @---- innovation after survival and productivity shocks----@ 
+   DT0new  = P'( n_S(zs).*( DT00+DTRH0 + (1-nxp)*DT01+ (1-cxp)*DTRH1 ) ) + D_E; 
+   DTHnew  = P'( n_S(zs).*( nxp*DT01 + cxp*( rhoH*DTH1+DTRH1 + (1-rhoL)*DTL1 ) ) ); 
+   DTLnew  = P'( n_S(zs).*( cxp*( (1-rhoH)*DTH1 + rhoL*DTL1 ) ) ); 
+   DTRHnew = P'( n_S(zs).*( DTH0+DTL0 + (1-cxp)*(DTH1+DTL1) ) ); 
+   
+   tol = maxc(abs( (DT0|DTH|DTL|DTRH) - (DT0new|DTHnew|DTLnew|DTRHnew) ) );
+   iter = 100*(tol.<1e-14);
+   
+   DT0  = DT0new;  @ current 0 @
+   DTH  = DTHnew;  @ current H @
+   DTL  = DTLnew;  @ current L @
+   DTRH = DTRHnew;  @ current RH @
+  
+endo;
+
+DTX = DTH+DTL; @ current 1 @
+DTN = DT0+DTRH; @ current 0 @
+
+SD0  = P'( n_S(zs).*DTN ); @ survived last period non-exporters @
+SD01 = P'( n_S(zs).*DT01*nxp ); @ survived starters from 0 @
+SDRH1 = P'( n_S(zs).*DTRH1*nxp ); @ survived restarters from RH @
+
+SD10 = P'( n_S(zs).*( DTH0+DTL0 + (1-cxp)*(DTH1+DTL1) ) );   @ survived last period exporters being non-exporters @
+SDX = P'( n_S(zs).*( DTX ) ); @ survived last period exporters @
+
+n_0 = sumc(SD01+SDRH1)/sumc(SD0);                     @ starter rate @
+n_1 = sumc(SD10)/sumc(SDX);          @ stopper rate @
+n_X = sumc(DTX)/sumc(DTN+DTX);                  @ exporter ratio @
+
+@---- 5-year exit ----@
+DE0s  = D_E;
+DEHs = 0*DE0s;
+DELs = 0*DE0s;
+DERHs = 0*DE0s;
+
+iter=1; do until iter>20;
+   @---- exporting decisions before exporting shocks ----@
+   DE00 = (1-ms0).*DE0s[.,iter];
+   DE01 = ms0.*DE0s[.,iter];
+   DEH0 = (1-msH).*DEHs[.,iter];
+   DEH1 = msH.*DEHs[.,iter];
+   DEL0 = (1-msL).*DELs[.,iter];
+   DEL1 = msL.*DELs[.,iter];
+   DERH0 = (1-msRH).*DERHs[.,iter];
+   DERH1 = msRH.*DERHs[.,iter];
+
+   @---- innovation after survival and productivity shocks----@
+   DE0new  = P'( n_S(zs).*( DE00+DERH0 + (1-nxp)*DE01+ (1-cxp)*DERH1 ) );
+   DEHnew  = P'( n_S(zs).*( nxp*DE01 + cxp*( rhoH*DEH1+DERH1 + (1-rhoL)*DEL1 ) ) ); 
+   DELnew  = P'( n_S(zs).*( cxp*((1-rhoH)*DEH1 + rhoL*DEL1) ) ); 
+   DERHnew = P'( n_S(zs).*( DEH0+DEL0 + (1-cxp)*(DEH1+DEL1) ) ); 
+
+   DE0s = DE0s~DE0new;
+   DEHs = DEHs~DEHnew;
+   DELs = DELs~DELnew;
+   DERHs = DERHs~DERHnew;
+      
+iter = iter+1; endo;
+
+DE_0s = DE0s;
+DE_Hs = DEHs;
+DE_Ls = DELs;
+DE_RHs = DERHs;
+
+Exit5 = 1-sumc(DE_0s[.,6]|DE_Hs[.,6]|DE_Ls[.,6]|DE_RHs[.,6])/sumc(DE_0s[.,1]|DE_Hs[.,1]|DE_Ls[.,1]|DE_RHs[.,1]);
+
+
+
+@------ eei ------@
+IntN = exp(zs)'DTN;    @ Integration for nontraded goods       @ 
+IntH = exp(zs)'DTH;    @ Integration for traded goods with xiH @   
+IntL = exp(zs)'DTL;    @ Integration for traded goods with xiL @   
+IntT = IntN+IntH+IntL;  
+
+eei  = ta^(-th)*( xiL^(1-th)*IntL + xiH^(1-th)*IntH )/( IntL + IntH + ta^(-th)*( xiL^(1-th)*IntL + xiH^(1-th)*IntH ) ); @ intensity of all @
+OP  = ( tiL*IntL + tiH*IntH )/( IntN + tiL*IntL + tiH*IntH  )*sumc(DTN+DTX)/sumc(DTX); @ Output Premium @
+
+@----------  Labor -------------@
+L_0 = exp(zs);       @ normalized labor @
+L_L = exp(zs)*tiL;
+L_H = exp(zs)*tiH;
+
+L_T = L_0'DTN + L_H'DTH + L_L'DTL;  @ Total Labor @
+Ly0 = L_0'D_E;          @ 0-year labor @
+
+DDT00 = DT00 - (n_S(zs).*DT00); @ shutdown plants of 00 @
+DDT01 = DT01 - (n_S(zs).*DT01); @ shutdown plants of 01 @
+
+DDTH0 = DTH0 - (n_S(zs).*DTH0); @ shutdown plants of H0 @
+DDTH1 = DTH1 - (n_S(zs).*DTH1); @ shutdown plants of H1 @
+
+DDTL0 = DTL0 - (n_S(zs).*DTL0); @ shutdown plants of L0 @
+DDTL1 = DTL1 - (n_S(zs).*DTL1); @ shutdown plants of L1 @
+
+DDTRH0 = DTRH0 - (n_S(zs).*DTRH0); @ shutdown plants of H0 @
+DDTRH1 = DTRH1 - (n_S(zs).*DTRH1); @ shutdown plants of H1 @
+
+
+Ld0 = L_0'(DDT00+DDT01+DDTRH0+DDTRL0+DDTRH1) + L_H'(DDTH0+DDTH1) + L_L'(DDTL0+DDTL1);  @ Shutdown plants' labor @
+
+shutdown = sumc(D_E)/sumc(DTN+DTH+DTL);
+
+@===================================@
+@===     EMPLOYMENT DISTRIBUTION ===@
+@===================================@
+wgtL  =  L1992/E1992*sumc(DTN+DTX)/L_T;
+
+L_0D  = (L_0*wgtL)~(DT0/sumc(DTN+DTX));
+L_HD  = (L_H*wgtL)~(DTH/sumc(DTN+DTX));
+L_LD  = (L_L*wgtL)~(DTL/sumc(DTN+DTX));
+L_RHD = (L_0*wgtL)~(DTRH/sumc(DTN+DTX));
+L_ND  = (L_0*wgtL)~(DTN/sumc(DTN+DTX));
+
+L_cof = 5|10|20|50|100|250|500|1000|2500;
+
+i=1; do until i>rows(L_cof);
+   if i==1;
+      L_cmfe = sumc(L_ND[.,2].*(L_ND[.,1].<L_cof[i])) + sumc(L_LD[.,2].*(L_LD[.,1].<L_cof[i])) + sumc(L_HD[.,2].*(L_HD[.,1].<L_cof[i]));  @ Establishment @
+      L_cmfl = sumc((L_ND[.,1].*L_ND[.,2]).*(L_ND[.,1].<L_cof[i])) + sumc((L_LD[.,1].*L_LD[.,2]).*(L_LD[.,1].<L_cof[i]))
+               + sumc((L_HD[.,1].*L_HD[.,2]).*(L_HD[.,1].<L_cof[i])); @ Employment @
+      L_pmfe = L_cmfe;
+      L_pmfl = L_cmfl;
+   else;
+      L_cmfe = L_cmfe|( sumc(L_ND[.,2].*(L_ND[.,1].<L_cof[i])) + sumc(L_LD[.,2].*(L_LD[.,1].<L_cof[i]))
+                        + sumc(L_HD[.,2].*(L_HD[.,1].<L_cof[i])) );
+      L_cmfl = L_cmfl|( sumc((L_ND[.,1].*L_ND[.,2]).*(L_ND[.,1].<L_cof[i])) + sumc((L_LD[.,1].*L_LD[.,2]).*(L_LD[.,1].<L_cof[i])) 
+                        + sumc((L_HD[.,1].*L_HD[.,2]).*(L_HD[.,1].<L_cof[i])) );
+      L_pmfe = L_pmfe|(L_cmfe[i]-L_cmfe[i-1]);
+      L_pmfl = L_pmfl|(L_cmfl[i]-L_cmfl[i-1]);
+   endif;
+i=i+1; endo;
+L_cmfe = L_cmfe|(sumc(L_ND[.,2]+L_LD[.,2]+L_HD[.,2]));
+L_pmfe = L_pmfe|(L_cmfe[rows(L_cmfe)]-L_cmfe[rows(L_cmfe)-1]);
+
+L_cmfl = L_cmfl|(L_ND[.,1]'L_ND[.,2]+L_LD[.,1]'L_LD[.,2]+L_HD[.,1]'L_HD[.,2]);
+L_pmfl = L_pmfl|(L_cmfl[rows(L_cmfl)]-L_cmfl[rows(L_cmfl)-1]);
+
+L_pmfl = L_pmfl/L_cmfl[rows(L_cmfl)];
+L_cmfl = L_cmfl/L_cmfl[rows(L_cmfl)];
+
+@============ Export participation rate distribution ==========@
+
+L_cofx = 100|250|500|1000|2500;
+
+i=1; do until i>rows(L_cofx);
+   if i==1;
+      L_cmf3 = sumc(L_ND[.,2].*(L_ND[.,1].<L_cofx[i])) + sumc(L_LD[.,2].*(L_LD[.,1].<L_cofx[i]))
+               + sumc(L_HD[.,2].*(L_HD[.,1].<L_cofx[i])); @ All Establishment mass @
+      L_cmf4 = sumc(L_LD[.,2].*(L_LD[.,1].<L_cofx[i])) + sumc(L_HD[.,2].*(L_HD[.,1].<L_cofx[i])); @ Exporter establishement mass @
+      L_cmfx = L_cmf4/L_cmf3;                               @ Exporter share CMF (Establishment) @
+      L_pmf3 = L_cmf3;
+      L_pmf4 = L_cmf4;
+      L_pmfx = L_cmfx;   
+   else;
+      L_cmf3 = L_cmf3|( sumc(L_ND[.,2].*(L_ND[.,1].<L_cofx[i])) + sumc(L_LD[.,2].*(L_LD[.,1].<L_cofx[i])) 
+                         + sumc(L_HD[.,2].*(L_HD[.,1].<L_cofx[i])) );
+      L_cmf4 = L_cmf4|( sumc(L_LD[.,2].*(L_LD[.,1].<L_cofx[i])) + sumc(L_HD[.,2].*(L_HD[.,1].<L_cofx[i])) );
+      L_cmfx = L_cmfx|(L_cmf4/L_cmf3);
+      L_pmf3 = L_pmf3|(L_cmf3[i]-L_cmf3[i-1]);
+      L_pmf4 = L_pmf4|(L_cmf4[i]-L_cmf4[i-1]);
+      L_pmfx = L_pmfx|(L_pmf4[i]/L_pmf3[i]);
+   endif;
+i=i+1; endo;
+
+L_cmf3 = L_cmf3|(sumc(L_ND[.,2]+L_LD[.,2]+L_HD[.,2]));
+L_pmf3 = L_pmf3|(L_cmf3[rows(L_cmf3)]-L_cmf3[rows(L_cmf3)-1]);
+
+L_cmf4 = L_cmf4|(sumc(L_LD[.,2]+L_HD[.,2]));
+L_pmf4 = L_pmf4|(L_cmf4[rows(L_cmf4)]-L_cmf4[rows(L_cmf4)-1]);
+
+L_cmfx = L_cmfx|(L_cmf4[rows(L_cmf4)]/L_cmf3[rows(L_cmf3)]);
+L_pmfx = L_pmfx|(L_pmf4[rows(L_pmf4)]/L_pmf3[rows(L_pmf4)]);
+
+
+@---- 20-year Innovation ----@
+
+@---- DT0 ----@
+DE0s  =DT0;
+DEHs = 0*DE0s;
+DELs = 0*DE0s;
+DERHs = 0*DE0s;
+
+iter=1; do until iter>20;
+   @---- exporting decisions before exporting shocks ----@
+   DE00 = (1-ms0).*DE0s[.,iter];
+   DE01 = ms0.*DE0s[.,iter];
+   DEH0 = (1-msH).*DEHs[.,iter];
+   DEH1 = msH.*DEHs[.,iter];
+   DEL0 = (1-msL).*DELs[.,iter];
+   DEL1 = msL.*DELs[.,iter];
+   DERH0 = (1-msRH).*DERHs[.,iter];
+   DERH1 = msRH.*DERHs[.,iter];
+
+   @---- innovation after survival and productivity shocks----@
+   DE0new  = P'( n_S(zs).*( DE00+DERH0 + (1-nxp)*DE01+ (1-cxp)*DERH1 ) );
+   DEHnew  = P'( n_S(zs).*( nxp*DE01 + cxp*( rhoH*DEH1+DERH1 + (1-rhoL)*DEL1 ) ) ); 
+   DELnew  = P'( n_S(zs).*( cxp*((1-rhoH)*DEH1 + rhoL*DEL1) ) ); 
+   DERHnew = P'( n_S(zs).*( DEH0+DEL0 + (1-cxp)*(DEH1+DEL1) ) ); 
+
+   DE0s = DE0s~DE0new;
+   DEHs = DEHs~DEHnew;
+   DELs = DELs~DELnew;
+   DERHs = DERHs~DERHnew;
+      
+iter = iter+1; endo;
+
+D0_0s = DE0s;
+D0_Hs = DEHs;
+D0_Ls = DELs;
+D0_RHs = DERHs;
+
+
+@ == DTHs == @
+DE0s  =DT0*0;
+DEHs = DTH;
+DELs = DTH*0;
+DERHs = DTH*0;
+
+iter=1; do until iter>20;
+   @---- exporting decisions before exporting shocks ----@
+   DE00 = (1-ms0).*DE0s[.,iter];
+   DE01 = ms0.*DE0s[.,iter];
+   DEH0 = (1-msH).*DEHs[.,iter];
+   DEH1 = msH.*DEHs[.,iter];
+   DEL0 = (1-msL).*DELs[.,iter];
+   DEL1 = msL.*DELs[.,iter];
+   DERH0 = (1-msRH).*DERHs[.,iter];
+   DERH1 = msRH.*DERHs[.,iter];
+
+   @---- innovation after survival and productivity shocks----@
+   DE0new  = P'( n_S(zs).*( DE00+DERH0 + (1-nxp)*DE01+ (1-cxp)*DERH1 ) );
+   DEHnew  = P'( n_S(zs).*( nxp*DE01 + cxp*( rhoH*DEH1+DERH1 + (1-rhoL)*DEL1 ) ) ); 
+   DELnew  = P'( n_S(zs).*( cxp*((1-rhoH)*DEH1 + rhoL*DEL1) ) ); 
+   DERHnew = P'( n_S(zs).*( DEH0+DEL0 + (1-cxp)*(DEH1+DEL1) ) ); 
+
+   DE0s = DE0s~DE0new;
+   DEHs = DEHs~DEHnew;
+   DELs = DELs~DELnew;
+   DERHs = DERHs~DERHnew;
+      
+iter = iter+1; endo;
+
+DH_0s = DE0s;
+DH_Hs = DEHs;
+DH_Ls = DELs;
+DH_RHs = DERHs;
+
+
+@ == DTLs == @
+DE0s  =DT0*0;
+DEHs = DTH*0;
+DELs = DTL;
+DERHs = DTH*0;
+
+iter=1; do until iter>20;
+   @---- exporting decisions before exporting shocks ----@
+   DE00 = (1-ms0).*DE0s[.,iter];
+   DE01 = ms0.*DE0s[.,iter];
+   DEH0 = (1-msH).*DEHs[.,iter];
+   DEH1 = msH.*DEHs[.,iter];
+   DEL0 = (1-msL).*DELs[.,iter];
+   DEL1 = msL.*DELs[.,iter];
+   DERH0 = (1-msRH).*DERHs[.,iter];
+   DERH1 = msRH.*DERHs[.,iter];
+
+   @---- innovation after survival and productivity shocks----@
+   DE0new  = P'( n_S(zs).*( DE00+DERH0 + (1-nxp)*DE01+ (1-cxp)*DERH1 ) );
+   DEHnew  = P'( n_S(zs).*( nxp*DE01 + cxp*( rhoH*DEH1+DERH1 + (1-rhoL)*DEL1 ) ) ); 
+   DELnew  = P'( n_S(zs).*( cxp*((1-rhoH)*DEH1 + rhoL*DEL1) ) ); 
+   DERHnew = P'( n_S(zs).*( DEH0+DEL0 + (1-cxp)*(DEH1+DEL1) ) ); 
+
+   DE0s = DE0s~DE0new;
+   DEHs = DEHs~DEHnew;
+   DELs = DELs~DELnew;
+   DERHs = DERHs~DERHnew;
+      
+iter = iter+1; endo;
+
+DL_0s = DE0s;
+DL_Hs = DEHs;
+DL_Ls = DELs;
+DL_RHs = DERHs;
+
+
+@ == DTRHs == @
+DE0s  =DT0*0;
+DEHs = DTH*0;
+DELs = DTL*0;
+DERHs = DTRH;
+
+iter=1; do until iter>20;
+   @---- exporting decisions before exporting shocks ----@
+   DE00 = (1-ms0).*DE0s[.,iter];
+   DE01 = ms0.*DE0s[.,iter];
+   DEH0 = (1-msH).*DEHs[.,iter];
+   DEH1 = msH.*DEHs[.,iter];
+   DEL0 = (1-msL).*DELs[.,iter];
+   DEL1 = msL.*DELs[.,iter];
+   DERH0 = (1-msRH).*DERHs[.,iter];
+   DERH1 = msRH.*DERHs[.,iter];
+
+   @---- innovation after survival and productivity shocks----@
+   DE0new  = P'( n_S(zs).*( DE00+DERH0 + (1-nxp)*DE01+ (1-cxp)*DERH1 ) );
+   DEHnew  = P'( n_S(zs).*( nxp*DE01 + cxp*( rhoH*DEH1+DERH1 + (1-rhoL)*DEL1 ) ) ); 
+   DELnew  = P'( n_S(zs).*( cxp*((1-rhoH)*DEH1 + rhoL*DEL1) ) ); 
+   DERHnew = P'( n_S(zs).*( DEH0+DEL0 + (1-cxp)*(DEH1+DEL1) ) ); 
+
+   DE0s = DE0s~DE0new;
+   DEHs = DEHs~DEHnew;
+   DELs = DELs~DELnew;
+   DERHs = DERHs~DERHnew;
+      
+iter = iter+1; endo;
+
+DRH_0s = DE0s;
+DRH_Hs = DEHs;
+DRH_Ls = DELs;
+DRH_RHs = DERHs;
+
+@ ===== NEW EXPORTERS ===== @ 
+
+NSD01 = sumc(SD01+SDRH1);     @ # of new exporters including restarters @
+XSD01 = SD01'exp(zs)*(tiH-1)+SDRH1'exp(zs)*(tiH-1);  @ exports of new exporters @
+XDX   = exp(zs)'DTH*(tiH-1) + exp(zs)'DTL*(tiL-1);    @ exports of all exporters @   
+
+nxnew = NSD01/sumc(DTX);  @ # of new exporters among exporters @
+Xnewshare = XSD01/XDX;        @ new exporters' export share @  
+
+
+@ ==== tn years later ====@
+ND0tn = sumc(D0_Hs[.,tn]+D0_Ls[.,tn]+DRH_Hs[.,tn]+DRH_Ls[.,tn]);  @ # of exporters tn years later among initial non-exporters @
+XD0tn = (D0_Hs[.,tn]+DRH_Hs[.,tn])'exp(zs)*(tiH-1) + (D0_Ls[.,tn]+DRH_Ls[.,tn])'exp(zs)*(tiL-1);  @ exports of non-exporters tn years ago @
+
+nx0tn = ND0tn/sumc(DTX);  @ # of new exporters among exporters @
+X0tnshare = XD0tn/XDX;        @ new exporters' export share @  
+
+ND1tn = sumc(DH_Hs[.,tn]+DH_Ls[.,tn]+DL_Hs[.,tn]+DL_Ls[.,tn]);  @ # of exporters tn years later among initial exporters @
+XD1tn = (DH_Hs[.,tn]+DL_Hs[.,tn])'exp(zs)*(tiH-1) + (DH_Ls[.,tn]+DL_Ls[.,tn])'exp(zs)*(tiL-1);  @ exports of exporters tn years ago @
+
+nx1tn = ND1tn/sumc(DTX);  @ # of exporters that exported tn years ago among exporters @
+X1tnshare = XD1tn/XDX;    @ exporters' export share for firms exported tn years ago @  
+
+
+@ ===== NEW EXPORTERS BALANCED ===== @ 
+ND2 = sumc(D0_Hs[.,2]+DRH_Hs[.,2]+DH_Hs[.,2]+DL_Hs[.,2]+D0_Ls[.,2]+DRH_Ls[.,2]+DH_Ls[.,2]+DL_Ls[.,2]);  @ exports of all firms exisited 2 years ago @
+XD2 = (D0_Hs[.,2]+DRH_Hs[.,2]+DH_Hs[.,2]+DL_Hs[.,2])'exp(zs)*(tiH-1) 
+      + (D0_Ls[.,2]+DRH_Ls[.,2]+DH_Ls[.,2]+DL_Ls[.,2])'exp(zs)*(tiL-1);  @ exports of all firms exisited 2 years ago @
+
+nxnew2 = NSD01/ND2;  @ # of new exporters among exporters @
+Xnewshare2 = XSD01/XD2;        @ new exporters' export share @  
+
+
+@ ==== tn years later  BALANCED ====@
+NDtn = sumc(D0_Hs[.,tn]+DRH_Hs[.,tn]+DH_Hs[.,tn]+DL_Hs[.,tn]+D0_Ls[.,tn]+DRH_Ls[.,tn]+DH_Ls[.,tn]+DL_Ls[.,tn]);  @ exports of all firms existed 2 years ago @
+XDtn = (D0_Hs[.,tn]+DRH_Hs[.,tn]+DH_Hs[.,tn]+DL_Hs[.,tn])'exp(zs)*(tiH-1) 
+      + (D0_Ls[.,tn]+DRH_Ls[.,tn]+DH_Ls[.,tn]+DL_Ls[.,tn])'exp(zs)*(tiL-1);  @ exports of all firms exisited 2 years ago @
+
+nxnewtn = ND0tn/NDtn;  @ # of new exporters among exporters @
+Xnewsharetn = XD0tn/XDtn;        @ new exporters' export share @  
+
+
+retp(paras);
+endp;
+@--------------- END PROC simul(x) -------------------@
+
+
+@--------------- BEGIN PROC findxiL(x) -------------------@
+@ find xiL to get E(intensity 5-year of exporting) = eei5 @
+@ initial exporting = year 0                              @
+@ forget about prob of entry and exit                     @
+@---------------------------------------------------------@
+proc findxiL(x);
+   local ip;
+   xiL = exp(x);
+
+   dH=1; @ mass of H : start with H @
+   dL=0; @ mass of L : start with H @
+   ip = 1; do until ip>21;
+      dH = dH|( dH[ip]*rhoH + dL[ip]*(1-rhoL) );
+      dL = dL|( dH[ip]*(1-rhoH) + dL[ip]*rhoL );
+   ip = ip+1; endo;
+   Eintensity = dH.*ta^(-th)*xiH^(1-th)/( 1 + ta^(-th)*xiH^(1-th) ) + dL.*ta^(-th)*xiL^(1-th)/( 1 + ta^(-th)*xiL^(1-th) );
+   
+   vxiL[1] =  Eintensity[5] - eei5;
+
+retp(vxiL);
+endp;
+@--------------- END PROC findxiL(x) -------------------@
+
+
+@--------------- BEGIN PROC Val0HL(x) -------------------@
+@     Values, and f_0 & f_1 are normalized               @
+@     Returns the values given f_T, f_0 and f_1          @
+@--------------------------------------------------------@
+proc Val0HL(xf01);
+
+   local i, iter, tol;
+   f_0 = exp(xf01[1]);     @ f_0 @
+   f_1 = exp(xf01[2]);     @ f_1 @
+   f_R = exp(xf01[3]);     @ f_R @
+
+   @--- Initial values: to be corrected ---@
+   V0  = 1/bet.*exp(zs);      @ current period non-exporter   row(z_today) @
+   VH  = 1/bet.*exp(zs)*tiH;  @ current period xiH exporter   row(z_today) @
+   VL  = 1/bet.*exp(zs)*tiL;  @ current period xiL exporter   row(z_today) @
+   VRH = 1/bet.*exp(zs);      @ last period xiH nonexporter   row(z_today) @
+
+   iter=1; do until iter>10;
+      EV0  = bet*n_S(zs).*(P*V0);  @ discounted expected value when m=0 row(z_today), col=1 @
+      EVH  = bet*n_S(zs).*(P*VH);  @ discounted expected value when m=1 row(z_today), col=1 @
+      EVL  = bet*n_S(zs).*(P*VL);  @ discounted expected value when m=1 row(z_today), col=1 @
+      EVRH = bet*n_S(zs).*(P*VRH);  @ discounted expected value when m=1 row(z_today), col=1 @
+      
+      @ expected value after payments decision @
+
+      EV0f  = maxc( EV0'|((1-nxp)*EV0'+nxp*EVH'-f_0) );  @ taking max @
+      EVHf  = maxc( EVRH'|((1-cxp)*EVRH'+cxp*(rhoH*EVH + (1-rhoH)*EVL)'-f_1 ) );  @ taking max @
+      EVLf  = maxc( EVRH'|((1-cxp)*EVRH'+cxp*((1-rhoL)*EVH + rhoL*EVL)'-f_1 ) );  @ taking max @
+      EVRHf = maxc( EV0'|((1-cxp)*EV0'+cxp*EVH'-f_R ) );  @ taking max @
+      
+      V0_new  = exp(zs) + EV0f;
+      VH_new  = exp(zs)*tiH + EVHf;
+      VL_new  = exp(zs)*tiL + EVLf;
+      VRH_new = exp(zs) + EVRHf;
+
+      tol = maxc( abs( vec(V0|VH|VL|VRH) - vec(V0_new|VH_new|VL_new|VRH_new) ) );
+      iter = 100*(tol.<1e-10);
+      V0  = V0_new;
+      VH  = VH_new;
+      VL  = VL_new;
+      VRH = VRH_new;
+      @tol;@
+   endo;
+retp(V0~VH~VL~VRH);
+endp;
+@--------------- END PROC Val0HL(x) -------------------@
+
+
+
+@--------------- BEGIN PROC Cutoff(x) -------------------@
+@---- Given Val, find Val(i)=0, and fraction   ----------@
+@--------------------------------------------------------@
+proc(4)= Cutoff(Val);
+
+   local fracV, zcut, ind0, ms;
+   ind0 = sumc(Val.<=0);
+   if ind0==0;
+      zcut = zs[1] - Val[1]*(zs[2]-zs[1])/(Val[2]-Val[1]);
+      zcut = maxc(zcut|(zs[1]-ome/2));  @ take min(zs)-ome/2 @ 
+      ind0 = 1;  @ index for adding fraction @
+      fracV = (zs[1]+ome/2-zcut)/ome;
+   endif;
+   if ind0==nodes; @ extrapolate @
+      zcut = zs[nodes-1] - Val[nodes-1]*(zs[nodes]-zs[nodes-1])/(Val[nodes]-Val[nodes-1]);
+      zcut = minc(zcut|(zs[nodes]+ome/2));  
+      ind0 = nodes;
+      fracV = (zs[ind0]+ome/2-zcut)/ome;
+   endif;
+   if (ind0>0).and (ind0<nodes); @ take linear interpolation @
+      zcut = zs[ind0] - Val[ind0]*(zs[ind0+1]-zs[ind0])/(Val[ind0+1]-Val[ind0]);
+      ind0 = sumc((zs-ome/2).<zcut);
+      fracV = (zs[ind0]+ome/2-zcut)/ome;
+   endif;
+   ms = ((zs-ome/2).>zcut);
+   ms[ind0] = fracV;
+retp(zcut,fracV,ind0,ms);   
+endp;
+@--------------- END PROC Cutoff(x) -------------------@
+
+@--------------- BEGIN PROC n_S(x) -------------------@
+@  Finding shutdown probability given nd0 and lamD    @
+@-----------------------------------------------------@
+proc n_S(x);
+   local nS;
+   nS = 1-exp(-lamD*exp(x));  @ probability of survival @
+   nS = nS - nd0;     
+   nS = maxc((nS')|zeros(1,rows(nS)));
+   nS = minc((nS')|ones(1,rows(nS)));
+  
+retp(nS);
+endp;
+@--------------- END PROC n_S(x) -------------------@
+
